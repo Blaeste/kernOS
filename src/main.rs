@@ -12,6 +12,9 @@
 #![no_std]
 #![no_main]
 
+// Import modules
+mod vga;
+
 /*
     use core::panic::PanicInfo;
     use = importer quelque chose pour pouvoir l'utiliser.
@@ -53,32 +56,8 @@ fn panic(_info: &PanicInfo) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
 
-    // Adresse 0xB8000 pointeur vers octets modifiables. *mut = pointeur mutable.
-    let vga = 0xB8000 as *mut u8;
-
-    // Efface tout l'écran
-    for i in 0..2000 {
-        unsafe {
-            *vga.add(i * 2)     = b' ';
-            *vga.add(i * 2 + 1) = 0x00;
-        }
-    }
-
-    // b devant = byte string, un tableau d'octets ASCII. Pas une String Rust (qui nécessite std).
-    let message = b"Welcome to KernOS";
-    let col = (80 - message.len()) / 2;
-    let row = 12;
-    let offset = (row * 80 + col) * 2;
-
-    for (i, &byte) in message.iter().enumerate() {
-
-        //unsafe { } → écrire directement en mémoire via un pointeur brut est dangereux
-        unsafe {
-            // *vga.add(n) avance le pointeur de n octets. * = déréférencement accéde à la valeur à cette adresse.
-            *vga.add(offset + i * 2)     = byte; // Caractère ASCII
-            *vga.add(offset + i * 2 + 1) = 0x0B; // cyan clair sur noir
-        }
-    }
+    vga::clear();
+    vga::center(b"Welcome to KernOS", 12, 0x0B);
 
     loop {}
 }
