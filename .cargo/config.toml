@@ -1,0 +1,9 @@
+[build]
+target = "x86_64-unknown-none"
+
+[target.x86_64-unknown-none]
+runner = ["C:\\Program Files\\qemu\\qemu-system-x86_64.exe", "-kernel"]
+rustflags = [
+    "-C", "link-arg=-Tlinker.ld",
+    "-C", "relocation-model=static"
+]
