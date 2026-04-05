@@ -54,6 +54,7 @@ fn execute(cmd: &[u8]) {
         crate::println!("  uptime - temps depuis le demarrage");
         crate::println!("  memmap - affiche la carte memoire");
         crate::println!("  frames - affiche les frames libres");
+        crate::println!("  pgtest - teste la pagination");
     } else if eq(cmd, b"clear") {
         unsafe { (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
@@ -75,6 +76,34 @@ fn execute(cmd: &[u8]) {
         let free = crate::mem::frame::free_count();
         let free_kb = free * 4;
         crate::println!("Frames libres: {} ({} Ko)", free, free_kb);
+    } else if eq(cmd, b"pgtest") {
+        // 1. Alloue un frame physique libre
+        let phys = crate::mem::frame::alloc().expect("pgtest: plus de frames");
+        crate::println!("Frame alloue: {:#x}", phys);
+
+        // 2. Mappe ce frame vers une adresse virtuelle au-dela du 1er Go
+        //    0x4000_0000 = 1 Go, donc hors de l'identity map du boot
+        let virt: u64 = 0x4000_0000;
+        crate::mem::paging::map(virt, phys);
+        crate::println!("Mappe: {:#x} -> {:#x}", virt, phys);
+
+        // 3. Ecrit une valeur magique à l'adresse virtuelle
+        unsafe { *(virt as *mut u64) = 0xCAFE_BABE; }
+        crate::println!("Ecriture: *{:#x} = 0xCAFE_BABE", virt);
+
+        // 4. Relit pour vérifier
+        let val = unsafe { *(virt as *const u64) };
+        crate::println!("Lecture:  *{:#x} = {:#x}", virt, val);
+
+        // 5. Traduit l'adresse pour vérifier le mapping
+        if let Some(p) = crate::mem::paging::translate(virt) {
+            crate::println!("Translate: {:#x} -> {:#x} OK", virt, p);
+        }
+
+        // 6. Unmap + libère le frame
+        crate::mem::paging::unmap(virt);
+        crate::mem::frame::free(phys);
+        crate::println!("Unmap + free OK");
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {
