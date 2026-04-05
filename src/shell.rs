@@ -51,6 +51,8 @@ fn execute(cmd: &[u8]) {
         crate::println!("  help   - affiche cette aide");
         crate::println!("  clear  - efface l'ecran");
         crate::println!("  reboot - redemarre la machine");
+        crate::println!("  uptime - temps depuis le demarrage");
+        crate::println!("  memmap - affiche la carte memoire");
     } else if eq(cmd, b"clear") {
         unsafe { (*core::ptr::addr_of_mut!(crate::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
@@ -59,7 +61,16 @@ fn execute(cmd: &[u8]) {
         let ticks = crate::timer::get_ticks();
         let seconds = ticks / 100;
         crate::println!("Uptime: {} secondes ({} ticks)", seconds, ticks);
-    } else if cmd.is_empty() {
+    } else if eq(cmd, b"memmap") {
+        // Affiche la carte mémoire fournie par GRUB (zones RAM libres/réservées)
+        let addr = unsafe { *core::ptr::addr_of!(crate::MULTIBOOT_ADDR) };
+        crate::println!("== Memory Map ==");
+        crate::multiboot::parse_memory_map(addr, |entry| {
+            let kind = if entry.is_available() { "LIBRE" } else { "RESERVE" };
+            let size_kb = entry.length / 1024;
+            crate::println!("  {:#010x} - {} Ko - {}", entry.base_addr, size_kb, kind);
+        });
+     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {
         crate::println!("commande inconnue: {}", core::str::from_utf8(cmd).unwrap_or("???"));

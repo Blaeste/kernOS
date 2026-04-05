@@ -28,6 +28,9 @@ mod multiboot;
 #[global_allocator]
 static ALLOCATOR: allocator::BumpAllocator = allocator::BumpAllocator;
 
+/// Adresse Multiboot2 info — stockée au boot pour utilisation ultérieure (shell, etc.)
+pub static mut MULTIBOOT_ADDR: u64 = 0;
+
 /* 
     Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
     $($arg:tt)* → capture n'importe quels arguments (texte, variables, expressions)
@@ -92,6 +95,8 @@ fn panic(_info: &PanicInfo) -> ! {
 */
 #[unsafe(no_mangle)]
 pub extern "C" fn _start(multiboot_addr: u64) -> ! {
+    // Sauvegarde l'adresse Multiboot2 pour que le shell puisse y accéder
+    unsafe { *core::ptr::addr_of_mut!(MULTIBOOT_ADDR) = multiboot_addr; }
 
     // addr_of_mut! → pointeur brut vers WRITER sans créer de référence (obligatoire en Rust edition 2024)
     // (*...) → déréférencement du pointeur pour accéder aux méthodes 
@@ -110,14 +115,6 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     //// unsafe { core::arch::asm!("div rax", in("rax") 0u64, options(nostack)); }
 
     println!("KernOS v0.1");
-
-    // Affiche la carte mémoire fournie par GRUB (zones RAM libres/réservées)
-    println!("== Memory Map ==");
-    multiboot::parse_memory_map(multiboot_addr, |entry| {
-        let kind = if entry.is_available() { "LIBRE" } else { "RESERVE" };
-        let size_kb = entry.length / 1024;
-        println!("  {:#010x} - {} Ko - {}", entry.base_addr, size_kb, kind);
-    });
 
     shell::prompt();
 
