@@ -3,6 +3,7 @@ use core::arch::naked_asm;
 use crate::println;
 use crate::pic;				// pour appeler pic::eoi()
 use crate::mouse;
+use crate::keyboard;
 
 /* 
 	Entrée IDT — 16 octets exacts lus directement par le CPU.
@@ -180,12 +181,7 @@ pub extern "C" fn irq_timer_inner() {
 pub extern "C" fn irq_keyboard_inner() {									
     let scancode = unsafe { pic::inb(0x60) };
 	unsafe { pic::eoi(1); }	
-
-	if scancode >= 0x80 {
-		println!("Relache: {}", scancode - 0x80);
-	} else {
-		println!("Appui: {}", scancode);
-	}
+	keyboard::on_key(scancode);
 }
 
 pub extern "C" fn irq_cascade_inner() {

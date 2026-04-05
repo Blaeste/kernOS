@@ -17,15 +17,50 @@ pub struct Writer {
 }
 
 impl Writer {
+	pub fn scroll(&mut self) {
+		// Copie chaque ligne vers la ligne du dessus
+		for row in 1..HEIGHT {
+			for col in 0..WIDTH {
+				let from = (row * WIDTH + col) * 2;
+				let to = ((row - 1) * WIDTH + col) * 2;
+				unsafe {
+					*VGA.add(to)		= *VGA.add(from);
+					*VGA.add(to + 1)	= *VGA.add(from + 1);
+				}
+			}
+		}
+		// Efface la derniere ligne
+		for col in 0..WIDTH {
+			let offset = ((HEIGHT - 1) * WIDTH + col) * 2;
+			unsafe {
+				*VGA.add(offset)		= b' ';
+				*VGA.add(offset + 1)	= self.color;
+			}
+		}
+		self.row = HEIGHT - 1;
+		self.col = 0;
+	}
+
 	pub fn clear(&mut self) {
 		for i in 0..(WIDTH * HEIGHT) {
 			unsafe {
-				*VGA.add(i * 2)		= b' ';
-				*VGA.add(i * 2 + 1)	= 0x00;
+				*VGA.add(i * 2)     = b' ';
+				*VGA.add(i * 2 + 1) = 0x00;
 			}
 		}
 		self.row = 0;
 		self.col = 0;
+	}
+
+	pub fn backspace(&mut self) {
+		if self.col > 0 {
+			self.col -= 1;
+			let offset = (self.row * WIDTH + self.col) * 2;
+			unsafe {
+				*VGA.add(offset)		= b' ';
+				*VGA.add(offset + 1)	= self.color;
+			}
+		}
 	}
 
 	pub fn write_byte(&mut self, byte: u8) {
@@ -34,7 +69,7 @@ impl Writer {
 				self.col = 0;
 				self.row += 1;
 				if self.row >= HEIGHT {  // sorti de l'écran → efface et repart du haut
-					self.clear();
+					self.scroll();
 				}
 			}
 			byte => {
@@ -48,7 +83,7 @@ impl Writer {
 					self.col = 0;
 					self.row += 1;
 					if self.row >= HEIGHT {  // sorti de l'écran → efface et repart du haut
-						self.clear();
+						self.scroll();
 					}
 				}
 			}

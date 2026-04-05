@@ -17,6 +17,7 @@ mod vga;
 mod interrupt;
 mod pic;
 mod mouse;
+mod keyboard;
 
 /* 
     Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
