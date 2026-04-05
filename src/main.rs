@@ -12,6 +12,8 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 // Import modules
 mod vga;
 mod interrupt;
@@ -19,6 +21,10 @@ mod pic;
 mod mouse;
 mod keyboard;
 mod shell;
+mod allocator;
+
+#[global_allocator]
+static ALLOCATOR: allocator::BumpAllocator = allocator::BumpAllocator;
 
 /* 
     Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
@@ -104,6 +110,6 @@ pub extern "C" fn _start() -> ! {
     println!("2 + 2 = {}", 2 + 2);
 
     shell::prompt();
-
+    
     loop {}
 }
