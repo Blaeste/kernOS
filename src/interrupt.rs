@@ -1,10 +1,10 @@
 use core::arch::asm;
 use core::arch::naked_asm;
 use crate::println;
-use crate::pic;				// pour appeler pic::eoi()
-use crate::mouse;
-use crate::keyboard;
-use crate::timer;
+use crate::drivers::pic;				// pour appeler pic::eoi()
+use crate::drivers::mouse;
+use crate::drivers::keyboard;
+use crate::drivers::timer;
 
 /* 
 	Entrée IDT — 16 octets exacts lus directement par le CPU.

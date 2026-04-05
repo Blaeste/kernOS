@@ -34,12 +34,34 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 2. ~~**Affichage VGA**~~ ✅ — print!/println! avec formatage
 3. ~~**Interruptions**~~ ✅ — IDT complète, exceptions CPU
 4. ~~**PIC + Clavier + Souris**~~ ✅ — PIC 8259, IRQ, scancodes, souris PS/2
-5. ~~**Scancodes → ASCII + Shell**~~ ✅ — Clavier ASCII, mini-shell (help, clear, reboot, uptime)
+5. ~~**Scancodes → ASCII + Shell**~~ ✅ — Clavier ASCII, mini-shell (help, clear, reboot, uptime, memmap, frames)
 6. ~~**Allocateur + Timer**~~ ✅ — Bump allocator 64Ko, PIT 100Hz
-7. **Multitâche** — Scheduler de processus
-8. **Système de fichiers** — Lire/écrire sur disque
-9. **Shell texte** — Interface utilisateur en ligne de commande
-10. **Stack graphique** — Framebuffer, window manager, GUI
+7. ~~**Mémoire physique**~~ ✅ — Memory map Multiboot2, frame allocator bitmap
+8. **Pagination** — Page tables 4 niveaux, mapping virtuel ↔ physique
+9. **Multitâche** — Scheduler de processus
+10. **Système de fichiers** — Lire/écrire sur disque
+11. **Stack graphique** — Framebuffer, window manager, GUI
+
+## Architecture du Code
+
+```
+src/
+├── main.rs            point d'entrée, macros print!/println!
+├── boot.asm           bootloader ASM 32→64 bit, Multiboot2
+├── interrupt.rs       IDT, handlers exceptions + IRQ stubs
+├── multiboot.rs       parsing tags Multiboot2 (memory map)
+├── shell.rs           mini-shell (buffer, commandes)
+├── mem/
+│   ├── allocator.rs   bump allocator (heap 64Ko pour String, Vec)
+│   └── frame.rs       frame allocator bitmap (pages 4Ko)
+├── drivers/
+│   ├── pic.rs         PIC 8259 init + EOI
+│   ├── keyboard.rs    scancode → ASCII, gestion Shift
+│   ├── mouse.rs       souris PS/2, paquets 3 octets
+│   └── timer.rs       PIT 100Hz, compteur ticks
+└── io/
+    └── vga.rs         affichage VGA (clear, scroll, backspace)
+```
 
 ## Commandes d'Installation
 

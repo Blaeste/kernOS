@@ -24,7 +24,7 @@ pub fn on_char(ch: u8) {
             unsafe {
                 if LEN > 0 {
                     LEN -= 1;
-                    (*core::ptr::addr_of_mut!(crate::vga::WRITER)).backspace();
+                    (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).backspace();
                 }
             }
         }
@@ -55,11 +55,11 @@ fn execute(cmd: &[u8]) {
         crate::println!("  memmap - affiche la carte memoire");
         crate::println!("  frames - affiche les frames libres");
     } else if eq(cmd, b"clear") {
-        unsafe { (*core::ptr::addr_of_mut!(crate::vga::WRITER)).clear(); }
+        unsafe { (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
         unsafe { asm!("out dx, al", in("dx") 0x64u16, in("al") 0xFEu8, options(nostack)); }
     } else if eq(cmd, b"uptime") {
-        let ticks = crate::timer::get_ticks();
+        let ticks = crate::drivers::timer::get_ticks();
         let seconds = ticks / 100;
         crate::println!("Uptime: {} secondes ({} ticks)", seconds, ticks);
     } else if eq(cmd, b"memmap") {
@@ -72,7 +72,7 @@ fn execute(cmd: &[u8]) {
             crate::println!("  {:#010x} - {} Ko - {}", entry.base_addr, size_kb, kind);
         });
     } else if eq(cmd, b"frames") {
-        let free = crate::frame::free_count();
+        let free = crate::mem::frame::free_count();
         let free_kb = free * 4;
         crate::println!("Frames libres: {} ({} Ko)", free, free_kb);
     } else if cmd.is_empty() {

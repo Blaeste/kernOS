@@ -15,19 +15,15 @@
 extern crate alloc;
 
 // Import modules
-mod vga;
+mod io;
+mod drivers;
+mod mem;
 mod interrupt;
-mod pic;
-mod mouse;
-mod keyboard;
-mod shell;
-mod allocator;
-mod timer;
 mod multiboot;
-mod frame;
+mod shell;
 
 #[global_allocator]
-static ALLOCATOR: allocator::BumpAllocator = allocator::BumpAllocator;
+static ALLOCATOR: mem::allocator::BumpAllocator = mem::allocator::BumpAllocator;
 
 /// Adresse Multiboot2 info — stockée au boot pour utilisation ultérieure (shell, etc.)
 pub static mut MULTIBOOT_ADDR: u64 = 0;
@@ -42,7 +38,7 @@ pub static mut MULTIBOOT_ADDR: u64 = 0;
 macro_rules! print {
     ($($arg:tt)*) => ({
         use core::fmt::Write;
-        unsafe { write!(&mut *core::ptr::addr_of_mut!($crate::vga::WRITER), $($arg)*).unwrap() }
+        unsafe { write!(&mut *core::ptr::addr_of_mut!($crate::io::vga::WRITER), $($arg)*).unwrap() }
     });
 }
 
@@ -101,14 +97,14 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
 
     // addr_of_mut! → pointeur brut vers WRITER sans créer de référence (obligatoire en Rust edition 2024)
     // (*...) → déréférencement du pointeur pour accéder aux méthodes 
-    unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
-    unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
+    unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
+    unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
 
     interrupt::init();  // charge l'IDT
-    pic::init();        // remapping + init PIC
-    timer::init(100);   // 100 Hz = 10ms par tick
-    unsafe { mouse::init(); }
-    frame::init(multiboot_addr);
+    drivers::pic::init();        // remapping + init PIC
+    drivers::timer::init(100);   // 100 Hz = 10ms par tick
+    unsafe { drivers::mouse::init(); }
+    mem::frame::init(multiboot_addr);
 
     // Active les interruptions
     unsafe { core::arch::asm!("sti", options(nostack)); }
