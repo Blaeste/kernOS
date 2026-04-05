@@ -14,6 +14,7 @@
 
 // Import modules
 mod vga;
+mod interrupt;
 
 /* 
     Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
@@ -25,7 +26,7 @@ mod vga;
 macro_rules! print {
     ($($arg:tt)*) => ({
         use core::fmt::Write;
-        unsafe { write!(&mut *core::ptr::addr_of_mut!(vga::WRITER), $($arg)*).unwrap() }
+        unsafe { write!(&mut *core::ptr::addr_of_mut!($crate::vga::WRITER), $($arg)*).unwrap() }
     });
 }
 
@@ -35,8 +36,8 @@ macro_rules! print {
 */
 #[macro_export]
 macro_rules! println {
-    ()              => (print!("\n"));
-    ($($arg:tt)*)   => (print!("{}\n", format_args!($($arg)*)));
+    ()              => ($crate::print!("\n"));
+    ($($arg:tt)*)   => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
 /*
@@ -84,6 +85,12 @@ pub extern "C" fn _start() -> ! {
     // (*...) → déréférencement du pointeur pour accéder aux méthodes 
     unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
     unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
+
+    interrupt::init(); // charge l'IDT
+
+    // test exception devide 0
+    //// unsafe { core::arch::asm!("div rax", in("rax") 0u64, options(nostack)); }
+
     println!("KernOS v0.1");
     println!("2 + 2 = {}", 2 + 2);
 
