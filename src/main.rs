@@ -18,6 +18,7 @@ mod interrupt;
 mod pic;
 mod mouse;
 mod keyboard;
+mod shell;
 
 /* 
     Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
@@ -101,6 +102,8 @@ pub extern "C" fn _start() -> ! {
 
     println!("KernOS v0.1");
     println!("2 + 2 = {}", 2 + 2);
+
+    shell::prompt();
 
     loop {}
 }

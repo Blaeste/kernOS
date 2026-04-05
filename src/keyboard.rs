@@ -67,16 +67,10 @@ pub fn on_key(scancode: u8) {
             NORMAL[scancode as usize]
         };
 
-        if ch == 8 {
-            // Backspace -> effacer dernier caractere
-            unsafe { (*core::ptr::addr_of_mut!(crate::vga::WRITER)).backspace(); }
-            return;
-        }
-
         if ch == 27 || ch == 0 {
             return; // Escape et touches speciales -> ignorer
         }
 
-        crate::print!("{}", ch as char);
+        crate::shell::on_char(ch);
     }
 }
