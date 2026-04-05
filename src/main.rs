@@ -22,6 +22,7 @@ mod mouse;
 mod keyboard;
 mod shell;
 mod allocator;
+mod timer;
 
 #[global_allocator]
 static ALLOCATOR: allocator::BumpAllocator = allocator::BumpAllocator;
@@ -98,6 +99,7 @@ pub extern "C" fn _start() -> ! {
 
     interrupt::init();  // charge l'IDT
     pic::init();        // remapping + init PIC
+    timer::init(100);   // 100 Hz = 10ms par tick
     unsafe { mouse::init(); }
 
     // Active les interruptions
@@ -110,6 +112,6 @@ pub extern "C" fn _start() -> ! {
     println!("2 + 2 = {}", 2 + 2);
 
     shell::prompt();
-    
+
     loop {}
 }

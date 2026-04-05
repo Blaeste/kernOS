@@ -4,6 +4,7 @@ use crate::println;
 use crate::pic;				// pour appeler pic::eoi()
 use crate::mouse;
 use crate::keyboard;
+use crate::timer;
 
 /* 
 	Entrée IDT — 16 octets exacts lus directement par le CPU.
@@ -175,6 +176,7 @@ pub unsafe extern "C" fn handler_page_fault() {
 
 // ── Vrais handlers (appelés depuis les stubs) ──
 pub extern "C" fn irq_timer_inner() {
+	timer::tick();
     unsafe { pic::eoi(0); }
 }
 

@@ -34,8 +34,8 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 2. ~~**Affichage VGA**~~ ✅ — print!/println! avec formatage
 3. ~~**Interruptions**~~ ✅ — IDT complète, exceptions CPU
 4. ~~**PIC + Clavier + Souris**~~ ✅ — PIC 8259, IRQ, scancodes, souris PS/2
-5. **Scancodes → ASCII** — Conversion clavier, mini-shell
-6. **Gestion mémoire** — Pagination, allocateur heap
+5. ~~**Scancodes → ASCII + Shell**~~ ✅ — Clavier ASCII, mini-shell (help, clear, reboot, uptime)
+6. ~~**Allocateur + Timer**~~ ✅ — Bump allocator 64Ko, PIT 100Hz
 7. **Multitâche** — Scheduler de processus
 8. **Système de fichiers** — Lire/écrire sur disque
 9. **Shell texte** — Interface utilisateur en ligne de commande

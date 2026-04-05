@@ -55,6 +55,10 @@ fn execute(cmd: &[u8]) {
         unsafe { (*core::ptr::addr_of_mut!(crate::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
         unsafe { asm!("out dx, al", in("dx") 0x64u16, in("al") 0xFEu8, options(nostack)); }
+    } else if eq(cmd, b"uptime") {
+        let ticks = crate::timer::get_ticks();
+        let seconds = ticks / 100;
+        crate::println!("Uptime: {} secondes ({} ticks)", seconds, ticks);
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {
