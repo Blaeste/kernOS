@@ -33,6 +33,9 @@ impl Writer {
 			b'\n' => { // Si c'est un retour a la ligne
 				self.col = 0;
 				self.row += 1;
+				if self.row >= HEIGHT {  // sorti de l'écran → efface et repart du haut
+					self.clear();
+				}
 			}
 			byte => {
 				let offset = (self.row * WIDTH +  self.col) * 2;
@@ -44,6 +47,9 @@ impl Writer {
 				if self.col >= WIDTH { // retour a la ligne auto
 					self.col = 0;
 					self.row += 1;
+					if self.row >= HEIGHT {  // sorti de l'écran → efface et repart du haut
+						self.clear();
+					}
 				}
 			}
 		}

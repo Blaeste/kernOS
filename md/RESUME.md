@@ -30,15 +30,16 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 
 ## Feuille de Route
 
-1. **Bootloader UEFI** — Écrire un bootloader qui démarre la machine
-2. **Mode 64-bit + affichage texte** — Passer en long mode et afficher à l'écran
-3. **Gestion mémoire** — Pagination, allocateur
-4. **Interruptions** — IDT, gestion clavier/timer
-5. **Multitâche** — Scheduler de processus
-6. **Système de fichiers** — Lire/écrire sur disque
-7. **Drivers** — Clavier, écran, disque
-8. **Shell texte** — Interface utilisateur en ligne de commande
-9. **Stack graphique** — Framebuffer, window manager, GUI
+1. ~~**Bootloader**~~ ✅ — Boot ASM Multiboot2, passage 32→64 bit
+2. ~~**Affichage VGA**~~ ✅ — print!/println! avec formatage
+3. ~~**Interruptions**~~ ✅ — IDT complète, exceptions CPU
+4. ~~**PIC + Clavier + Souris**~~ ✅ — PIC 8259, IRQ, scancodes, souris PS/2
+5. **Scancodes → ASCII** — Conversion clavier, mini-shell
+6. **Gestion mémoire** — Pagination, allocateur heap
+7. **Multitâche** — Scheduler de processus
+8. **Système de fichiers** — Lire/écrire sur disque
+9. **Shell texte** — Interface utilisateur en ligne de commande
+10. **Stack graphique** — Framebuffer, window manager, GUI
 
 ## Commandes d'Installation
 

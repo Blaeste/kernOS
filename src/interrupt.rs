@@ -1,5 +1,8 @@
 use core::arch::asm;
+use core::arch::naked_asm;
 use crate::println;
+use crate::pic;				// pour appeler pic::eoi()
+use crate::mouse;
 
 /* 
 	Entrée IDT — 16 octets exacts lus directement par le CPU.
@@ -111,6 +114,12 @@ pub const DOUBLE_FAULT:		u8 = 8;		// deux exceptions en même temps - fatal
 pub const GENERAL_PROTECT:	u8 = 13;	// violation de protection mémoire
 pub const PAGE_FAULT:		u8 = 14;	// accès mémoire invalide
 
+// Numéros IRQ dans l'IDT (après PIC : 32 + numéro IRQ)
+pub const IRQ_TIMER:		u8 = 32;	// IRQ0 - horloge système
+pub const IRQ_KEYBOARD:		u8 = 33;	// IRQ1 - clavier
+pub const IRQ_CASCADE:		u8 = 34;	// IRQ2 - liaison PIC esclave
+pub const IRQ_MOUSE:		u8 = 44;	// IRQ12 - souris
+
 // Handlers - Le CPU saute ici en cas d'exception
 // unsafe extern "C" : Le CPU appelle ces fonctions directement, pas Rust
 pub unsafe extern "C" fn handler_divide_error() {
@@ -163,6 +172,101 @@ pub unsafe extern "C" fn handler_page_fault() {
 	loop {}
 }
 
+// ── Vrais handlers (appelés depuis les stubs) ──
+pub extern "C" fn irq_timer_inner() {
+    unsafe { pic::eoi(0); }
+}
+
+pub extern "C" fn irq_keyboard_inner() {									
+    let scancode = unsafe { pic::inb(0x60) };
+	unsafe { pic::eoi(1); }	
+
+	if scancode >= 0x80 {
+		println!("Relache: {}", scancode - 0x80);
+	} else {
+		println!("Appui: {}", scancode);
+	}
+}
+
+pub extern "C" fn irq_cascade_inner() {
+    unsafe { pic::eoi(2); }
+}
+
+pub extern "C" fn irq_mouse_inner() {
+    let byte = unsafe { pic::inb(0x60) };
+	unsafe { pic::eoi(12); }
+	mouse::on_irq(byte);
+}
+
+// ── Stubs naked — sauvegarde registres + iretq ──
+#[unsafe(naked)]
+pub unsafe extern "C" fn irq_timer_stub() {
+    naked_asm!(
+        "push rax","push rbx","push rcx","push rdx",
+        "push rsi","push rdi","push rbp",
+        "push r8","push r9","push r10","push r11",
+        "push r12","push r13","push r14","push r15",
+        "call {f}",
+        "pop r15","pop r14","pop r13","pop r12",
+        "pop r11","pop r10","pop r9","pop r8",
+        "pop rbp","pop rdi","pop rsi","pop rdx",
+        "pop rcx","pop rbx","pop rax",
+        "iretq",
+        f = sym irq_timer_inner,
+    );
+}
+
+#[unsafe(naked)]
+pub unsafe extern "C" fn irq_keyboard_stub() {
+    naked_asm!(
+        "push rax","push rbx","push rcx","push rdx",
+        "push rsi","push rdi","push rbp",
+        "push r8","push r9","push r10","push r11",
+        "push r12","push r13","push r14","push r15",
+        "call {f}",
+        "pop r15","pop r14","pop r13","pop r12",
+        "pop r11","pop r10","pop r9","pop r8",
+        "pop rbp","pop rdi","pop rsi","pop rdx",
+        "pop rcx","pop rbx","pop rax",
+        "iretq",
+        f = sym irq_keyboard_inner,
+    );
+}
+
+#[unsafe(naked)]
+pub unsafe extern "C" fn irq_cascade_stub() {
+    naked_asm!(
+        "push rax","push rbx","push rcx","push rdx",
+        "push rsi","push rdi","push rbp",
+        "push r8","push r9","push r10","push r11",
+        "push r12","push r13","push r14","push r15",
+        "call {f}",
+        "pop r15","pop r14","pop r13","pop r12",
+        "pop r11","pop r10","pop r9","pop r8",
+        "pop rbp","pop rdi","pop rsi","pop rdx",
+        "pop rcx","pop rbx","pop rax",
+        "iretq",
+        f = sym irq_cascade_inner,
+    );
+}
+
+#[unsafe(naked)]
+pub unsafe extern "C" fn irq_mouse_stub() {
+    naked_asm!(
+        "push rax","push rbx","push rcx","push rdx",
+        "push rsi","push rdi","push rbp",
+        "push r8","push r9","push r10","push r11",
+        "push r12","push r13","push r14","push r15",
+        "call {f}",
+        "pop r15","pop r14","pop r13","pop r12",
+        "pop r11","pop r10","pop r9","pop r8",
+        "pop rbp","pop rdi","pop rsi","pop rdx",
+        "pop rcx","pop rbx","pop rax",
+        "iretq",
+        f = sym irq_mouse_inner,
+    );
+}
+
 // Initialise l'IDT avec tous les handlers
 pub fn init() {
 	unsafe {
@@ -177,6 +281,10 @@ pub fn init() {
 		(*idt).set_handler(DOUBLE_FAULT,	handler_double_fault);
 		(*idt).set_handler(GENERAL_PROTECT,	handler_general_protection);
 		(*idt).set_handler(PAGE_FAULT,		handler_page_fault);
+		(*idt).set_handler(IRQ_TIMER,   	irq_timer_stub);
+		(*idt).set_handler(IRQ_KEYBOARD, 	irq_keyboard_stub);
+		(*idt).set_handler(IRQ_CASCADE, 	irq_cascade_stub);
+		(*idt).set_handler(IRQ_MOUSE,   	irq_mouse_stub);
 		(*idt).load();
 	}
 }

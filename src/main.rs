@@ -15,6 +15,8 @@
 // Import modules
 mod vga;
 mod interrupt;
+mod pic;
+mod mouse;
 
 /* 
     Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
@@ -86,7 +88,12 @@ pub extern "C" fn _start() -> ! {
     unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
     unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
 
-    interrupt::init(); // charge l'IDT
+    interrupt::init();  // charge l'IDT
+    pic::init();        // remapping + init PIC
+    unsafe { mouse::init(); }
+
+    // Active les interruptions
+    unsafe { core::arch::asm!("sti", options(nostack)); }
 
     // test exception devide 0
     //// unsafe { core::arch::asm!("div rax", in("rax") 0u64, options(nostack)); }
