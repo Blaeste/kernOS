@@ -53,6 +53,7 @@ fn execute(cmd: &[u8]) {
         crate::println!("  reboot - redemarre la machine");
         crate::println!("  uptime - temps depuis le demarrage");
         crate::println!("  memmap - affiche la carte memoire");
+        crate::println!("  frames - affiche les frames libres");
     } else if eq(cmd, b"clear") {
         unsafe { (*core::ptr::addr_of_mut!(crate::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
@@ -70,7 +71,11 @@ fn execute(cmd: &[u8]) {
             let size_kb = entry.length / 1024;
             crate::println!("  {:#010x} - {} Ko - {}", entry.base_addr, size_kb, kind);
         });
-     } else if cmd.is_empty() {
+    } else if eq(cmd, b"frames") {
+        let free = crate::frame::free_count();
+        let free_kb = free * 4;
+        crate::println!("Frames libres: {} ({} Ko)", free, free_kb);
+    } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {
         crate::println!("commande inconnue: {}", core::str::from_utf8(cmd).unwrap_or("???"));

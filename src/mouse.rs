@@ -56,7 +56,7 @@ pub fn on_irq(byte: u8) {
     };
 
     if let Some((dx, dy, btn_left, btn_right)) = result {
-        crate::println!("[SOURIS] dx:{} dy:{} G:{} D:{}", dx, dy, btn_left as u8, btn_right as u8);
+        //crate::println!("[SOURIS] dx:{} dy:{} G:{} D:{}", dx, dy, btn_left as u8, btn_right as u8);
     }
 }
 

@@ -24,6 +24,7 @@ mod shell;
 mod allocator;
 mod timer;
 mod multiboot;
+mod frame;
 
 #[global_allocator]
 static ALLOCATOR: allocator::BumpAllocator = allocator::BumpAllocator;
@@ -107,6 +108,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     pic::init();        // remapping + init PIC
     timer::init(100);   // 100 Hz = 10ms par tick
     unsafe { mouse::init(); }
+    frame::init(multiboot_addr);
 
     // Active les interruptions
     unsafe { core::arch::asm!("sti", options(nostack)); }
