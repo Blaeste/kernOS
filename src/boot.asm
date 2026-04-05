@@ -45,6 +45,7 @@ global _start32 						; rend _start32 visible pour le linker (comme pub en Rust)
 
 _start32:
 	mov esp, stack_top 					; initialise le stack pointer. Sans stack, aucune fonction ne peut être appelée
+	mov edi, ebx						; sauvegarde l'adresse Multiboot2 info (passée par GRUB dans ebx)
 	call setup_page_tables				; configure les tables de pages pour le long mode (64-bit)
 
 	mov eax, cr4						; active le mode PAE (Physical Address Extension), nécessaire pour le long mode
@@ -117,6 +118,8 @@ _start64:								; point d'entrée en long mode
 	mov gs, ax							; segment nul pour les données
 
 	extern _start						; indique que _start est défini dans un autre fichier (main.rs en Rust)
+	; edi contient déja l'adresse multiboot (sauvegardée en 32-bit)
+	; En x86_64 System V ABI, rdi = 1er argument de focntion
 	call _start							; appelle la fonction _start du kernel pour continuer le processus de démarrage
 
 	hlt									; si _start retourne, on arrête le processeur (normalement, _start ne devrait jamais retourner)
