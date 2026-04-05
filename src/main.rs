@@ -15,6 +15,30 @@
 // Import modules
 mod vga;
 
+/* 
+    Macros d'affichage — remplacent std::print!/println! qu'on n'a pas en no_std
+    $($arg:tt)* → capture n'importe quels arguments (texte, variables, expressions)
+    core::fmt::Write → trait qui donne accès au formatage {} via write!()
+    addr_of_mut! → pointeur brut obligatoire en Rust edition 2024 (pas de référence vers static mut)
+*/
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ({
+        use core::fmt::Write;
+        unsafe { write!(&mut *core::ptr::addr_of_mut!(vga::WRITER), $($arg)*).unwrap() }
+    });
+}
+
+/*
+    println! — comme print! mais ajoute \n à la fin
+    format_args! → construit les arguments de formatage sans allocation mémoire
+*/
+#[macro_export]
+macro_rules! println {
+    ()              => (print!("\n"));
+    ($($arg:tt)*)   => (print!("{}\n", format_args!($($arg)*)));
+}
+
 /*
     use core::panic::PanicInfo;
     use = importer quelque chose pour pouvoir l'utiliser.
@@ -56,8 +80,12 @@ fn panic(_info: &PanicInfo) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
 
-    vga::clear();
-    vga::center(b"Welcome to KernOS", 12, 0x0B);
+    // addr_of_mut! → pointeur brut vers WRITER sans créer de référence (obligatoire en Rust edition 2024)
+    // (*...) → déréférencement du pointeur pour accéder aux méthodes 
+    unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
+    unsafe { (*core::ptr::addr_of_mut!(vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
+    println!("KernOS v0.1");
+    println!("2 + 2 = {}", 2 + 2);
 
     loop {}
 }
