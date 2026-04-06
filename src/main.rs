@@ -34,6 +34,7 @@ mod multiboot;
 mod shell;
 mod task;
 mod fs;
+mod ui;
 
 #[global_allocator]
 static ALLOCATOR: mem::allocator::BumpAllocator = mem::allocator::BumpAllocator;
@@ -152,6 +153,9 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // Tache de test : affiche un message en boucle
     // task::scheduler::spawn(task_test);
     // task::scheduler::spawn(task_test2);
+
+    // Test window
+    ui::window::draw_window(100, 100, 400, 300, "Ma fenetre");
 
     println!("KernOS v0.1");
 
