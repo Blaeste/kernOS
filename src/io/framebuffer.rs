@@ -3,6 +3,7 @@
 /// Chaque pixel = 4 octets : Bleu, Vert, Rouge, Alpha (format BGR en mémoire).
 
 use core::fmt;
+use core::ptr::{addr_of, addr_of_mut};
 
 /// Infos globales du framebuffer, remplies au boot.
 pub static mut FB_ADDR:     u64 = 0;        // adresse physique du framebuffer
@@ -23,22 +24,22 @@ pub struct FbWriter {
 
 /// Nombre de colonnes texte (dépend de la résolution)
 fn cols() -> u32 {
-    unsafe { *core::ptr::addr_of!(FB_WIDTH) / 8 }
+    unsafe { *addr_of!(FB_WIDTH) / 8 }
 }
 
 /// Nombre de lignes texte (dépend de la résolution)
 fn rows() -> u32 {
-    unsafe { *core::ptr::addr_of!(FB_HEIGHT) / 16 }
+    unsafe { *addr_of!(FB_HEIGHT) / 16 }
 }
 
 /// Initialise le framebuffer avec le sinfos du tag Multiboot2.
 pub fn init(fb: &crate::multiboot::FramebufferTag) {
     unsafe {
-        *core::ptr::addr_of_mut!(FB_ADDR) = fb.addr;
-        *core::ptr::addr_of_mut!(FB_WIDTH) = fb.width;
-        *core::ptr::addr_of_mut!(FB_HEIGHT) = fb.height;
-        *core::ptr::addr_of_mut!(FB_PITCH) = fb.pitch;
-        *core::ptr::addr_of_mut!(FB_ACTIVE) = true;
+        *addr_of_mut!(FB_ADDR) = fb.addr;
+        *addr_of_mut!(FB_WIDTH) = fb.width;
+        *addr_of_mut!(FB_HEIGHT) = fb.height;
+        *addr_of_mut!(FB_PITCH) = fb.pitch;
+        *addr_of_mut!(FB_ACTIVE) = true;
     }
 }
 
@@ -46,12 +47,23 @@ pub fn init(fb: &crate::multiboot::FramebufferTag) {
 /// color = 0xRRGGBB (ex: 0xFF0000 = rouge)
 pub fn put_pixel(x: u32, y: u32, color: u32) {
     unsafe {
-        let addr = *core::ptr::addr_of!(FB_ADDR);
-        let pitch = *core::ptr::addr_of!(FB_PITCH);
+        let addr = *addr_of!(FB_ADDR);
+        let pitch = *addr_of!(FB_PITCH);
 
         // calcule l'adresse du pixel : base + (y * pitch) + (x * 4)
         let pixel = (addr + (y as u64 * pitch as u64) + (x as u64 * 4)) as *mut u32;
         *pixel = color;
+    }
+}
+
+/// Lit la couleur du pixel à la position (x, y).
+pub fn get_pixel(x: u32, y: u32) -> u32 {
+    unsafe {
+        let addr = *addr_of!(FB_ADDR);
+        let pitch = *addr_of!(FB_PITCH);
+
+        let pixel = (addr + (y as u64 * pitch as u64) + (x as u64 * 4)) as *const u32;
+        *pixel
     }
 }
 
@@ -72,8 +84,8 @@ pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
 /// Efface tout l'écran avec la couleur donnée.
 pub fn clear(color: u32) {
     unsafe {
-        let w = *core::ptr::addr_of!(FB_WIDTH);
-        let h = *core::ptr::addr_of!(FB_HEIGHT);
+        let w = *addr_of!(FB_WIDTH);
+        let h = *addr_of!(FB_HEIGHT);
         fill_rect(0, 0, w, h, color);
     }
 }

@@ -12,6 +12,16 @@
 #![no_std]
 #![no_main]
 
+/*
+    use core::panic::PanicInfo;
+    use = importer quelque chose pour pouvoir l'utiliser.
+    core = la mini-bibliothèque disponible sans OS.
+    PanicInfo = un type qui décrit une erreur critique (le message, le fichier, la ligne).
+    On l'importe car notre fonction panic en a besoin.
+*/
+use core::panic::PanicInfo;
+use core::ptr::addr_of_mut;
+
 extern crate alloc;
 
 // Import modules
@@ -62,15 +72,6 @@ macro_rules! println {
 }
 
 /*
-    use core::panic::PanicInfo;
-    use = importer quelque chose pour pouvoir l'utiliser.
-    core = la mini-bibliothèque disponible sans OS.
-    PanicInfo = un type qui décrit une erreur critique (le message, le fichier, la ligne).
-    On l'importe car notre fonction panic en a besoin.
-*/
-use core::panic::PanicInfo;
-
-/*
     #[panic_handler]
     Un #[...] s'appelle un attribut — c'est une instruction pour le compilateur.
     Celui-ci dit : "la fonction qui suit est mon gestionnaire de panique".
@@ -118,17 +119,17 @@ fn panic(_info: &PanicInfo) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // Sauvegarde l'adresse Multiboot2 pour que le shell puisse y accéder
-    unsafe { *core::ptr::addr_of_mut!(MULTIBOOT_ADDR) = multiboot_addr; }
+    unsafe { *addr_of_mut!(MULTIBOOT_ADDR) = multiboot_addr; }
 
     // Initialise l'affichage : framebuffer si disponible, sinon VGA texte
     if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {
         io::framebuffer::init(fb);
-        unsafe { (*core::ptr::addr_of_mut!(io::framebuffer::FB_WRITER)).clear_screen(); }
+        unsafe { (*addr_of_mut!(io::framebuffer::FB_WRITER)).clear_screen(); }
     } else {
         // addr_of_mut! → pointeur brut vers WRITER sans créer de référence (obligatoire en Rust edition 2024)
         // (*...) → déréférencement du pointeur pour accéder aux méthodes 
-        unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
-        unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
+        unsafe { (*addr_of_mut!(io::vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
+        unsafe { (*addr_of_mut!(io::vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
     }
 
     interrupt::init();  // charge l'IDT
@@ -139,7 +140,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
 
     // Enregistre le kernel comme tâche 0
     unsafe {
-        (*core::ptr::addr_of_mut!(task::scheduler::TASKS))[0].active = true;
+        (*addr_of_mut!(task::scheduler::TASKS))[0].active = true;
     }
 
     // Active les interruptions
@@ -155,6 +156,9 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     println!("KernOS v0.1");
 
     shell::prompt();
+
+    // centre la souris et sauvegarde les pixels sous le curseur
+    drivers::mouse::init_cursor();
 
     loop {}
 }
