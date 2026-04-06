@@ -37,8 +37,8 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 5. ~~**Scancodes → ASCII + Shell**~~ ✅ — Clavier ASCII, mini-shell (help, clear, reboot, uptime, memmap, frames)
 6. ~~**Allocateur + Timer**~~ ✅ — Bump allocator 64Ko, PIT 100Hz
 7. ~~**Mémoire physique**~~ ✅ — Memory map Multiboot2, frame allocator bitmap
-8. **Pagination** — Page tables 4 niveaux, mapping virtuel ↔ physique
-9. **Multitâche** — Scheduler de processus
+8. ~~**Pagination**~~ ✅ — Page tables 4 niveaux, map/unmap/translate
+9. ~~**Multitâche**~~ ✅ — Scheduler round-robin, context switch, spawn
 10. **Système de fichiers** — Lire/écrire sur disque
 11. **Stack graphique** — Framebuffer, window manager, GUI
 

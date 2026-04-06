@@ -55,6 +55,7 @@ fn execute(cmd: &[u8]) {
         crate::println!("  memmap - affiche la carte memoire");
         crate::println!("  frames - affiche les frames libres");
         crate::println!("  pgtest - teste la pagination");
+        crate::println!("  tasks  - affiche les taches actives");
     } else if eq(cmd, b"clear") {
         unsafe { (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
@@ -104,6 +105,17 @@ fn execute(cmd: &[u8]) {
         crate::mem::paging::unmap(virt);
         crate::mem::frame::free(phys);
         crate::println!("Unmap + free OK");
+
+    } else if eq(cmd, b"tasks") {
+        crate::println!("== Taches ==");
+        for i in 0..crate::task::MAX_TASKS {
+            let active = unsafe { (*core::ptr::addr_of!(crate::task::TASKS))[i].active };
+            if active {
+                let current = unsafe { *core::ptr::addr_of!(crate::task::CURRENT) };
+                let marker = if i == current { " <-" } else { "" };
+                crate::println!(" [{}] active{}", i, marker);
+            }
+        }
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {

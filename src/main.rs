@@ -21,6 +21,7 @@ mod mem;
 mod interrupt;
 mod multiboot;
 mod shell;
+mod task;
 
 #[global_allocator]
 static ALLOCATOR: mem::allocator::BumpAllocator = mem::allocator::BumpAllocator;
@@ -77,6 +78,22 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
+fn task_test() {
+    loop {
+        crate::println!("[TACHE 1] salut !");
+        for _ in 0..10_000_000 { core::hint::spin_loop(); } //  CPU attends un peu sans rien faire. boucle de temporisation
+    }
+}
+
+fn task_test2() {
+    loop {
+        crate::println!("[TACHE 2] salut !");
+        for _ in 0..10_000_000 { core::hint::spin_loop(); } //  CPU attends un peu sans rien faire. boucle de temporisation
+    }
+}
+
+
+
 /*
     #[unsafe(no_mangle)]
     Par défaut, Rust renomme les fonctions en interne (ça s'appelle le "mangling") pour éviter les conflits.
@@ -106,11 +123,20 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     unsafe { drivers::mouse::init(); }
     mem::frame::init(multiboot_addr);
 
+    // Enregistre le kernel comme tâche 0
+    unsafe {
+        (*core::ptr::addr_of_mut!(task::TASKS))[0].active = true;
+    }
+
     // Active les interruptions
     unsafe { core::arch::asm!("sti", options(nostack)); }
 
     // test exception devide 0
     //// unsafe { core::arch::asm!("div rax", in("rax") 0u64, options(nostack)); }
+
+    // Tache de test : affiche un message en boucle
+    task::spawn(task_test);
+    task::spawn(task_test2);
 
     println!("KernOS v0.1");
 

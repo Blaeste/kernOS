@@ -175,9 +175,10 @@ pub unsafe extern "C" fn handler_page_fault() {
 }
 
 // ── Vrais handlers (appelés depuis les stubs) ──
-pub extern "C" fn irq_timer_inner() {
+pub extern "C" fn irq_timer_inner(rsp: u64) -> u64 {
 	timer::tick();
     unsafe { pic::eoi(0); }
+	crate::task::schedule(rsp)
 }
 
 pub extern "C" fn irq_keyboard_inner() {									
@@ -200,11 +201,18 @@ pub extern "C" fn irq_mouse_inner() {
 #[unsafe(naked)]
 pub unsafe extern "C" fn irq_timer_stub() {
     naked_asm!(
+		// Sauvegarde les 15 registres sur la pile de la tache courante
         "push rax","push rbx","push rcx","push rdx",
         "push rsi","push rdi","push rbp",
         "push r8","push r9","push r10","push r11",
         "push r12","push r13","push r14","push r15",
+
+		// Passe RSP en argument à irq_timer_inner(rsp)
+		"mov rdi, rsp",
         "call {f}",
+		"mov rsp, rax",
+
+		// Restaure les 15 registres depuis la pile de la NOUVELLE tâche
         "pop r15","pop r14","pop r13","pop r12",
         "pop r11","pop r10","pop r9","pop r8",
         "pop rbp","pop rdi","pop rsi","pop rdx",
