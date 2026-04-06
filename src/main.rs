@@ -129,6 +129,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {
         io::framebuffer::init(fb);
         io::framebuffer::clear(0x003366);        // fond bleu foncé
+        io::framebuffer::draw_string(100, 50, "KernOS v0.1", 0xFFFFFF, 0x003366);
         io::framebuffer::fill_rect(100, 100, 200, 150, 0xFF0000);  // rectangle rouge
         io::framebuffer::fill_rect(350, 200, 150, 150, 0x00FF00);  // rectangle vert
         io::framebuffer::fill_rect(550, 300, 100, 100, 0x0000FF);  // rectangle bleu
