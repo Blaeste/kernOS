@@ -158,7 +158,29 @@ impl FbWriter {
     /// On efface simplement l'écran et on remet le curseur à la dernière ligne.
     /// (Version simple - a améliorer plsu atrd avec un vrai buffer texte)
     pub fn scroll(&mut self) {
-        clear(BG);
+        unsafe {
+            let addr = *addr_of!(FB_ADDR);
+            let pitch = *addr_of!(FB_PITCH);
+            let h = *addr_of!(FB_HEIGHT);
+
+            // Copie chaque ligne de pxiels une ligne de texte (16px) vers le haut
+            let mut y: u32 = 16;
+            while y < h {
+                let dst = (addr + ((y - 16) as u64 * pitch as u64)) as *mut u8;
+                let src = (addr + (y as u64 * pitch as u64)) as *const u8;
+                let mut x: u32 = 0;
+                while x < pitch {
+                    *dst.add(x as usize) = *src.add(x as usize);
+                    x += 1;
+                }
+                y += 1;
+            }
+
+            // Efface la dernière ligne texte (16 lignes de pxiels)
+            let last_y = h - 16;
+            fill_rect(0, last_y, *addr_of!(FB_WIDTH), 16, BG);
+        }
+
         self.row = rows() - 1;
         self.col = 0;
     }
