@@ -22,6 +22,7 @@
 */
 
 use crate::io::framebuffer::{fill_rect, draw_string};
+use core::ptr::{addr_of, addr_of_mut};
 
 /// Couleurs de la fenêtre
 const BORDER_COLOR: u32 = 0x333333;     // gris foncé
@@ -57,6 +58,12 @@ static mut WINDOWS: [Window; MAX_WINDOWS] = [const { Window {
 } }; MAX_WINDOWS];
 
 static mut WINDOW_COUNT: usize = 0;
+
+// ── Drag & drop ─────────────────────────────────────────────────────────
+static mut DRAGGING:        bool = false;
+static mut DRAG_WIN:        usize = 0;
+static mut DRAG_OFFSET_X:   i32 = 0;
+static mut DRAG_OFFSET_Y:   i32 = 0;
 
 /// Crée une nouvelle fenêtre et retourne son index
 pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
@@ -102,7 +109,7 @@ fn draw_one(win: &Window) {
     fill_rect(win.x + BORDER, win.y + BORDER + TITLE_H, win.w - 2 * BORDER, win.h - 2 * BORDER - TITLE_H, CONTENT_BG);
 }
 
-// Dessine toutes les fenêtres (z-order = odre du tableau)
+/// Dessine toutes les fenêtres (z-order = odre du tableau)
 pub fn draw_all() {
     unsafe {
         let mut i = 0;
@@ -110,5 +117,66 @@ pub fn draw_all() {
             draw_one(&WINDOWS[i]);
             i += 1;
         }
+    }
+}
+
+/// CLic gauche enfoncé - comme le drag si on clique sur une barre de titre
+pub fn on_mouse_down(mx: i32, my: i32) {
+    unsafe {
+        if DRAGGING { return; }
+        // Parcourir les fenêtre de la plsu haute (dernière) à la plus basse
+        let mut i = WINDOW_COUNT;
+        while i > 0 {
+            i -= 1;
+            let win = &WINDOWS[i];
+            if !win.visible { continue; }
+
+            let wx = win.x as i32;
+            let wy = win.y as i32;
+            let ww = win.w as i32;
+
+            // Est-ce que le clic est dans la abrre de titre ?
+            if mx >= wx && mx < wx + ww && my >= wy && my < wy + TITLE_H as i32 + BORDER as i32 {
+                DRAGGING = true;
+                DRAG_WIN = i;
+                DRAG_OFFSET_X = mx - wx;
+                DRAG_OFFSET_Y = my - wy;
+                return;
+            }
+        }
+    }
+}
+
+/// Souris bouge avec clic maintenu - déplace la fenêtre
+pub fn on_mouse_move(mx: i32, my: i32) {
+    unsafe {
+        if !DRAGGING { return; }
+        let mut new_x = mx - DRAG_OFFSET_X;
+        let mut new_y = my - DRAG_OFFSET_Y;
+
+        let sw = *addr_of!(crate::io::framebuffer::FB_WIDTH) as i32;
+        let sh = *addr_of!(crate::io::framebuffer::FB_HEIGHT) as i32;
+        let ww = WINDOWS[DRAG_WIN].w as i32;
+        let wh = WINDOWS[DRAG_WIN].h as i32;
+
+        // Clamp : empêche la fenêtre de sortir de l'écran
+        if new_x < 0 { new_x = 0; }
+        if new_y < 0 { new_y = 0; }
+        if new_x + ww > sw { new_x = sw - ww; }
+        if new_y + wh > sh { new_y = sh - wh; }
+
+        WINDOWS[DRAG_WIN].x = new_x as u32;
+        WINDOWS[DRAG_WIN].y = new_y as u32;
+
+        // Verrouille la souris sur la fenêtre
+        *addr_of_mut!(crate::drivers::mouse::MOUSE_X) = new_x + DRAG_OFFSET_X;
+        *addr_of_mut!(crate::drivers::mouse::MOUSE_Y) = new_y + DRAG_OFFSET_Y;
+    }
+}
+
+/// Clic relâché -  arrête le drag
+pub fn on_mouse_up() {
+    unsafe {
+        DRAGGING = false;
     }
 }

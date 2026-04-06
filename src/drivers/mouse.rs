@@ -170,7 +170,7 @@ pub fn on_irq(byte: u8) {
         }
     };
 
-    if let Some((dx, dy, _btn_left, _btn_right)) = result {
+    if let Some((dx, dy, btn_left, _btn_right)) = result {
         unsafe {
             // Met à jour la position (dy iversé : souris vers le haut = valeur positive, mais écran Y augmente vers le bas)
             *addr_of_mut!(MOUSE_X) += dx as i32;
@@ -188,27 +188,44 @@ pub fn on_irq(byte: u8) {
             if my < 0 { *addr_of_mut!(MOUSE_Y) = 0; }
             if my >= h { *addr_of_mut!(MOUSE_Y) = h - 1; }
 
-            // Efface l'ancien curseur (replace ancien pixels sauvgardé)
-            let ox = *addr_of!(OLD_MOUSE_X) as u32;
-            let oy = *addr_of!(OLD_MOUSE_Y) as u32;
-            let mut i = 0;
+            // Gestion du drag des fenêtres
+            let mx = *addr_of!(MOUSE_X);
+            let my = *addr_of!(MOUSE_Y);
 
-            while i < CURSOR_H {
-                let mut j = 0;
-                while j < CURSOR_W {
-                    crate::io::framebuffer::put_pixel(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
-                    j += 1;
-                }
-                i += 1;
+            let mut redrawn = false;
+            if btn_left {
+                crate::ui::window::on_mouse_down(mx, my);
+                crate::ui::window::on_mouse_move(mx, my);
+                // Redessine seulement si on drag
+                crate::io::framebuffer::clear(0x005577);
+                crate::ui::window::draw_all();
+                redrawn = true;
+            } else {
+                crate::ui::window::on_mouse_up();
             }
 
-            // Sauvgarde les pixels sous le nouveau curseur
+            // Efface l'ancien curseur (replace ancien pixels sauvgardé)
+            if !redrawn {
+                let ox = *addr_of!(OLD_MOUSE_X) as u32;
+                let oy = *addr_of!(OLD_MOUSE_Y) as u32;
+                let mut i = 0;
+
+                while i < CURSOR_H {
+                    let mut j = 0;
+                    while j < CURSOR_W {
+                        crate::io::framebuffer::put_pixel(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
+                        j += 1;
+                    }
+                    i += 1;
+                }
+            }
+            
+            // Sauvegarde les pixels sous le nouveau curseur
             let nx = *addr_of!(MOUSE_X) as u32;
             let ny = *addr_of!(MOUSE_Y) as u32;
-            i = 0;
-
+            let mut i: u32 = 0;
             while i < CURSOR_H {
-                let mut j = 0;
+                let mut j: u32 = 0;
                 while j < CURSOR_W {
                     CURSOR_BACKUP[(i * CURSOR_W + j) as usize] = crate::io::framebuffer::get_pixel(nx + j, ny + i);
                     j += 1;
@@ -229,7 +246,10 @@ pub fn on_irq(byte: u8) {
                 }
                 i += 1;
             }
-            
+
+            // Affiche tout d'un coup (double buffering)
+            crate::io::framebuffer::swap_buffers();
+
             // Sauvegarde la position actuelle
             *addr_of_mut!(OLD_MOUSE_X) = *addr_of!(MOUSE_X);
             *addr_of_mut!(OLD_MOUSE_Y) = *addr_of!(MOUSE_Y);

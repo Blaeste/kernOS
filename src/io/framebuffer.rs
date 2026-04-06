@@ -12,6 +12,9 @@ pub static mut FB_HEIGHT:   u32 = 0;        // hauteur en pixels
 pub static mut FB_PITCH:    u32 = 0;        // octets par ligne
 pub static mut FB_ACTIVE:   bool = false;   // true si le framebuffer est actif
 
+/// Back buffer pour le double buffering (max 1920×1080)
+static mut BACK_BUF:        [u32; 2_073_600] = [0; 2_073_600];
+
 /// Couleurs par défault du texte
 const FG:                   u32 = 0xFFFFFF; // blanc
 const BG:                   u32 = 0x003366; // bleu foncé (fond)
@@ -47,23 +50,34 @@ pub fn init(fb: &crate::multiboot::FramebufferTag) {
 /// color = 0xRRGGBB (ex: 0xFF0000 = rouge)
 pub fn put_pixel(x: u32, y: u32, color: u32) {
     unsafe {
-        let addr = *addr_of!(FB_ADDR);
-        let pitch = *addr_of!(FB_PITCH);
-
-        // calcule l'adresse du pixel : base + (y * pitch) + (x * 4)
-        let pixel = (addr + (y as u64 * pitch as u64) + (x as u64 * 4)) as *mut u32;
-        *pixel = color;
+        let w = *addr_of!(FB_WIDTH);
+        if x >= w || y >= *addr_of!(FB_HEIGHT) { return; }
+        BACK_BUF[(y * w + x) as usize] = color;
     }
 }
 
 /// Lit la couleur du pixel à la position (x, y).
 pub fn get_pixel(x: u32, y: u32) -> u32 {
     unsafe {
-        let addr = *addr_of!(FB_ADDR);
-        let pitch = *addr_of!(FB_PITCH);
+        let w = *addr_of!(FB_WIDTH);
+        BACK_BUF[(y * w + x) as usize]
+    }
+}
 
-        let pixel = (addr + (y as u64 * pitch as u64) + (x as u64 * 4)) as *const u32;
-        *pixel
+/// Copie le back buffer vers le framebuffer réel (affiche tout d'un coup)
+pub fn swap_buffers() {
+    unsafe {
+        let addr = *addr_of!(FB_ADDR) as *mut u32;
+        let w = *addr_of!(FB_WIDTH) as usize;
+        let h = *addr_of!(FB_HEIGHT) as usize;
+        let pitch = *addr_of!(FB_PITCH) as usize;
+        let mut y = 0;
+        while y < h {
+            let src = addr_of!(BACK_BUF).cast::<u32>().add(y * w);
+            let dst = addr.add(y * pitch / 4);
+            core::ptr::copy_nonoverlapping(src, dst, w);
+            y += 1;
+        }
     }
 }
 
@@ -84,9 +98,13 @@ pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
 /// Efface tout l'écran avec la couleur donnée.
 pub fn clear(color: u32) {
     unsafe {
-        let w = *addr_of!(FB_WIDTH);
-        let h = *addr_of!(FB_HEIGHT);
-        fill_rect(0, 0, w, h, color);
+        let w = *addr_of!(FB_WIDTH) as usize;
+        let h = *addr_of!(FB_HEIGHT) as usize;
+        let mut i = 0;
+        while i < w * h {
+            BACK_BUF[i] = color;
+            i += 1;
+        }
     }
 }
 
@@ -159,26 +177,22 @@ impl FbWriter {
     /// (Version simple - a améliorer plsu atrd avec un vrai buffer texte)
     pub fn scroll(&mut self) {
         unsafe {
-            let addr = *addr_of!(FB_ADDR);
-            let pitch = *addr_of!(FB_PITCH);
-            let h = *addr_of!(FB_HEIGHT);
+            let w = *addr_of!(FB_WIDTH) as usize;
+            let h = *addr_of!(FB_HEIGHT) as usize;
 
             // Copie chaque ligne de pxiels une ligne de texte (16px) vers le haut
-            let mut y: u32 = 16;
+            let mut y: usize = 16;
             while y < h {
-                let dst = (addr + ((y - 16) as u64 * pitch as u64)) as *mut u8;
-                let src = (addr + (y as u64 * pitch as u64)) as *const u8;
-                let mut x: u32 = 0;
-                while x < pitch {
-                    *dst.add(x as usize) = *src.add(x as usize);
+                let mut x: usize = 0;
+                while x < w {
+                    BACK_BUF[(y - 16) * w + x] = BACK_BUF[y * w + x];
                     x += 1;
                 }
                 y += 1;
             }
 
             // Efface la dernière ligne texte (16 lignes de pxiels)
-            let last_y = h - 16;
-            fill_rect(0, last_y, *addr_of!(FB_WIDTH), 16, BG);
+            fill_rect(0, (h - 16) as u32, w as u32, 16, BG);
         }
 
         self.row = rows() - 1;
