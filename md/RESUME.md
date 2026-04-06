@@ -40,7 +40,7 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 8. ~~**Pagination**~~ ✅ — Page tables 4 niveaux, map/unmap/translate
 9. ~~**Multitâche**~~ ✅ — Scheduler round-robin, context switch, spawn
 10. **Système de fichiers** — Lire/écrire sur disque
-11. **Stack graphique** — Framebuffer, window manager, GUI
+11. ~~**Stack graphique**~~ ✅ — Framebuffer 800×600, police bitmap, FbWriter, double buffering, curseur souris, fenêtres, drag & drop
 
 ## Architecture du Code
 
@@ -57,10 +57,14 @@ src/
 ├── drivers/
 │   ├── pic.rs         PIC 8259 init + EOI
 │   ├── keyboard.rs    scancode → ASCII, gestion Shift
-│   ├── mouse.rs       souris PS/2, paquets 3 octets
+│   ├── mouse.rs       souris PS/2, curseur graphique, drag
 │   └── timer.rs       PIT 100Hz, compteur ticks
-└── io/
-    └── vga.rs         affichage VGA (clear, scroll, backspace)
+├── io/
+│   ├── vga.rs         affichage VGA (clear, scroll, backspace)
+│   ├── framebuffer.rs framebuffer graphique, double buffering, FbWriter
+│   └── font.rs        police bitmap VGA 8×16
+└── ui/
+    └── window.rs      fenêtres graphiques, drag & drop
 ```
 
 ## Commandes d'Installation
