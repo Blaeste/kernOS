@@ -50,6 +50,31 @@
 use core::arch::asm;
 use core::ptr::{addr_of, addr_of_mut};
 
+// ── Sprite du curseur (flèche 12x16) ───────────────────────────────────
+const CURSOR_W: u32 = 12;
+const CURSOR_H: u32 = 16;
+
+/// Forme du curseur — chaque u16 = une ligne, bit 1 = pixel blanc, bit 0 = transparent
+/// Le bit de poids fort (0x800) = pixel le plus à gauche
+static CURSOR_SHAPE: [u16; 16] = [
+    0b1000_0000_0000_0000,  // X
+    0b1100_0000_0000_0000,  // XX
+    0b1110_0000_0000_0000,  // XXX
+    0b1111_0000_0000_0000,  // XXXX
+    0b1111_1000_0000_0000,  // XXXXX
+    0b1111_1100_0000_0000,  // XXXXXX
+    0b1111_1110_0000_0000,  // XXXXXXX
+    0b1111_1111_0000_0000,  // XXXXXXXX
+    0b1111_1111_1000_0000,  // XXXXXXXXX
+    0b1111_1100_0000_0000,  // XXXXXX
+    0b1111_0000_0000_0000,  // XXXX
+    0b1101_1000_0000_0000,  // XX XX
+    0b1000_1100_0000_0000,  // X  XX
+    0b0000_0110_0000_0000,  //    XX
+    0b0000_0011_0000_0000,  //     XX
+    0b0000_0000_0000_0000,  //
+];
+
 /// Envoie une commande au contrôleur PS/2
 unsafe fn ps2_write_cmd(cmd: u8) {
     // Attendre que le buffer d'entrée soit vide
@@ -93,7 +118,7 @@ pub static mut MOUSE_Y:     i32 = 0;                      // position Y en pixel
 static mut OLD_MOUSE_X:     i32 = 0;                      // ancienne position X (pour effacer)
 static mut OLD_MOUSE_Y:     i32 = 0;                      // ancienne position Y (pour effacer)
 
-static mut CURSOR_BACKUP:   [u32; 64] = [0; 64];          // sauvegarde des 8x8 pixels sous le curseur
+static mut CURSOR_BACKUP:   [u32; 192] = [0; 192];        // sauvegarde des 12×16 pixels sous le curseur
 
 /// Centre la souris et sauvgarde les pixels sous el curseur initial.
 // Doit être appelé après init du framebuffer et l'affichage du texte.
@@ -107,11 +132,12 @@ pub fn init_cursor() {
 
         let mx = *addr_of!(MOUSE_X) as u32;
         let my = *addr_of!(MOUSE_Y) as u32;
+
         let mut i: u32 = 0;
-        while i < 8 {
+        while i < CURSOR_H {
             let mut j: u32 = 0;
-            while j < 8 {
-                CURSOR_BACKUP[(i * 8 + j) as usize] = crate::io::framebuffer::get_pixel(mx + j, my + i);
+            while j < CURSOR_W {
+                CURSOR_BACKUP[(i * CURSOR_W + j) as usize] = crate::io::framebuffer::get_pixel(mx + j, my + i);
                 j += 1;
             }
             i += 1;
@@ -166,10 +192,11 @@ pub fn on_irq(byte: u8) {
             let ox = *addr_of!(OLD_MOUSE_X) as u32;
             let oy = *addr_of!(OLD_MOUSE_Y) as u32;
             let mut i = 0;
-            while i < 8 {
+
+            while i < CURSOR_H {
                 let mut j = 0;
-                while j < 8 {
-                    crate::io::framebuffer::put_pixel(ox + j, oy + i, CURSOR_BACKUP[(i * 8 + j) as usize]);
+                while j < CURSOR_W {
+                    crate::io::framebuffer::put_pixel(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
                     j += 1;
                 }
                 i += 1;
@@ -179,18 +206,30 @@ pub fn on_irq(byte: u8) {
             let nx = *addr_of!(MOUSE_X) as u32;
             let ny = *addr_of!(MOUSE_Y) as u32;
             i = 0;
-            while i < 8 {
+
+            while i < CURSOR_H {
                 let mut j = 0;
-                while j < 8 {
-                    CURSOR_BACKUP[(i * 8 + j) as usize] = crate::io::framebuffer::get_pixel(nx + j, ny + i);
+                while j < CURSOR_W {
+                    CURSOR_BACKUP[(i * CURSOR_W + j) as usize] = crate::io::framebuffer::get_pixel(nx + j, ny + i);
                     j += 1;
                 }
                 i += 1;
             }
 
-            // Dessine le nouveau curseur (carré blanc 8x8)
-            crate::io::framebuffer::fill_rect(*addr_of!(MOUSE_X) as u32, *addr_of!(MOUSE_Y) as u32, 8, 8, 0xFFFFFF);
-
+            // Dessine le curseur flèche
+            i = 0;
+            while i < CURSOR_H {
+                let row = CURSOR_SHAPE[i as usize];
+                let mut j: u32 = 0;
+                while j < CURSOR_W {
+                    if (row >> (15 - j)) & 1 == 1 {
+                        crate::io::framebuffer::put_pixel(nx + j, ny + i, 0xFFFFFF);
+                    }
+                    j += 1;
+                }
+                i += 1;
+            }
+            
             // Sauvegarde la position actuelle
             *addr_of_mut!(OLD_MOUSE_X) = *addr_of!(MOUSE_X);
             *addr_of_mut!(OLD_MOUSE_Y) = *addr_of!(MOUSE_Y);
