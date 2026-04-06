@@ -31,6 +31,20 @@ pub struct MemoryEntry {
     _reserved:      u32,                          // padding, toujours 0
 }
 
+/// Tag frambuffer (type 8) - infos sur l'écran graphique configuré par GRUB.
+#[repr(C)]
+pub struct FramebufferTag {
+    tag_type:       u32,        // toujours 8
+    size:           u32,        // taille du tag
+    pub addr:       u64,        // adresse physique du framebuffer en mémoire
+    pub pitch:      u32,        // nombre d'octets par ligne (pas toujours = largeur x 4 !)
+    pub width:      u32,        // largeur en pixels
+    pub height:     u32,        // hauteur en pixels
+    pub bpp:        u8,         // bits par pixel (32 = RGBA)
+    pub fb_type:    u8,         // type de framebuffer (1 = RGB direct)
+    _reserved:      u8,
+}
+
 impl MemoryEntry {
     /// Type 1 = RAM utilisable par le kernel
     pub fn is_available(&self) -> bool {
@@ -38,8 +52,9 @@ impl MemoryEntry {
     }
 }
 
-const TAG_MEMORY_MAP: u32 = 6;                    // identifiant du tag memory map
-const TAG_END: u32 = 0;                           // identifiant du tag de fin
+const TAG_MEMORY_MAP:   u32 = 6;                    // identifiant du tag memory map
+const TAG_END:          u32 = 0;                    // identifiant du tag de fin
+const TAG_FRAMEBUFFER:  u32 = 8;                    // identifiant du tag framebuffer
 
 /// Parcourt les tags Multiboot2 pour trouver la memory map.
 /// Pour chaque zone mémoire trouvée, appelle `callback(entry)`.
@@ -80,6 +95,31 @@ pub fn parse_memory_map(multiboot_addr: u64, mut callback: impl FnMut(&MemoryEnt
             }
 
             offset += tag.size as usize; // passe au tag suivant
+        }
+    }
+}
+
+/// Cherche le tag framebuffer (type 8) dans les tags Multiboot2.
+/// Retourne un pointeur vers le tag si trouvé, sinon None.
+pub fn find_framebuffer(multiboot_addr: u64) -> Option<&'static FramebufferTag> {
+    unsafe {
+        let base = multiboot_addr as *const u8;
+        let mut offset: usize = 8;
+
+        loop {
+            offset = (offset + 7) & !7;
+
+            let tag = &*(base.add(offset) as *const Tag);
+
+            if tag.tag_type == TAG_END {
+                return None;
+            }
+
+            if tag.tag_type == TAG_FRAMEBUFFER {
+                return Some(&*(base.add(offset) as *const FramebufferTag));
+            }
+
+            offset += tag.size as usize;
         }
     }
 }

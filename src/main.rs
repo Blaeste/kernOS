@@ -125,6 +125,15 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     unsafe { drivers::mouse::init(); }
     mem::frame::init(multiboot_addr);
 
+     // Initialise le framebuffer si GRUB en a fourni un
+    if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {
+        io::framebuffer::init(fb);
+        io::framebuffer::clear(0x003366);        // fond bleu foncé
+        io::framebuffer::fill_rect(100, 100, 200, 150, 0xFF0000);  // rectangle rouge
+        io::framebuffer::fill_rect(350, 200, 150, 150, 0x00FF00);  // rectangle vert
+        io::framebuffer::fill_rect(550, 300, 100, 100, 0x0000FF);  // rectangle bleu
+    }
+
     // Enregistre le kernel comme tâche 0
     unsafe {
         (*core::ptr::addr_of_mut!(task::scheduler::TASKS))[0].active = true;
