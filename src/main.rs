@@ -41,7 +41,13 @@ pub static mut MULTIBOOT_ADDR: u64 = 0;
 macro_rules! print {
     ($($arg:tt)*) => ({
         use core::fmt::Write;
-        unsafe { write!(&mut *core::ptr::addr_of_mut!($crate::io::vga::WRITER), $($arg)*).unwrap() }
+        unsafe { 
+            if *core::ptr::addr_of!($crate::io::framebuffer::FB_ACTIVE) {
+                write!(&mut *core::ptr::addr_of_mut!($crate::io::framebuffer::FB_WRITER), $($arg)*).unwrap() 
+            } else {
+                write!(&mut *core::ptr::addr_of_mut!($crate::io::vga::WRITER), $($arg)*).unwrap() 
+            }
+        }
     });
 }
 
@@ -114,26 +120,22 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // Sauvegarde l'adresse Multiboot2 pour que le shell puisse y accéder
     unsafe { *core::ptr::addr_of_mut!(MULTIBOOT_ADDR) = multiboot_addr; }
 
-    // addr_of_mut! → pointeur brut vers WRITER sans créer de référence (obligatoire en Rust edition 2024)
-    // (*...) → déréférencement du pointeur pour accéder aux méthodes 
-    unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
-    unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
+    // Initialise l'affichage : framebuffer si disponible, sinon VGA texte
+    if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {
+        io::framebuffer::init(fb);
+        unsafe { (*core::ptr::addr_of_mut!(io::framebuffer::FB_WRITER)).clear_screen(); }
+    } else {
+        // addr_of_mut! → pointeur brut vers WRITER sans créer de référence (obligatoire en Rust edition 2024)
+        // (*...) → déréférencement du pointeur pour accéder aux méthodes 
+        unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).clear(); }         // efface l'écran et remet le curseur à (0,0)
+        unsafe { (*core::ptr::addr_of_mut!(io::vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
+    }
 
     interrupt::init();  // charge l'IDT
     drivers::pic::init();        // remapping + init PIC
     drivers::timer::init(100);   // 100 Hz = 10ms par tick
     unsafe { drivers::mouse::init(); }
     mem::frame::init(multiboot_addr);
-
-     // Initialise le framebuffer si GRUB en a fourni un
-    if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {
-        io::framebuffer::init(fb);
-        io::framebuffer::clear(0x003366);        // fond bleu foncé
-        io::framebuffer::draw_string(100, 50, "KernOS v0.1", 0xFFFFFF, 0x003366);
-        io::framebuffer::fill_rect(100, 100, 200, 150, 0xFF0000);  // rectangle rouge
-        io::framebuffer::fill_rect(350, 200, 150, 150, 0x00FF00);  // rectangle vert
-        io::framebuffer::fill_rect(550, 300, 100, 100, 0x0000FF);  // rectangle bleu
-    }
 
     // Enregistre le kernel comme tâche 0
     unsafe {

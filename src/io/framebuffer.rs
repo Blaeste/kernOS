@@ -2,11 +2,34 @@
 /// GRUB nous donne l'adresse mémoire, la taille, le pitch.
 /// Chaque pixel = 4 octets : Bleu, Vert, Rouge, Alpha (format BGR en mémoire).
 
+use core::fmt;
+
 /// Infos globales du framebuffer, remplies au boot.
 pub static mut FB_ADDR:     u64 = 0;        // adresse physique du framebuffer
 pub static mut FB_WIDTH:    u32 = 0;        // largeur en pixels
 pub static mut FB_HEIGHT:   u32 = 0;        // hauteur en pixels
 pub static mut FB_PITCH:    u32 = 0;        // octets par ligne
+pub static mut FB_ACTIVE:   bool = false;   // true si le framebuffer est actif
+
+/// Couleurs par défault du texte
+const FG:                   u32 = 0xFFFFFF; // blanc
+const BG:                   u32 = 0x003366; // bleu foncé (fond)
+
+/// Writer framebuffer - gère un curseur texte et dessine avec la police bitmap.
+pub struct FbWriter {
+    pub row: u32,                           // ligne courante (en caractères, aps en pixels)
+    pub col: u32,                           // colonne courante
+}
+
+/// Nombre de colonnes texte (dépend de la résolution)
+fn cols() -> u32 {
+    unsafe { *core::ptr::addr_of!(FB_WIDTH) / 8 }
+}
+
+/// Nombre de lignes texte (dépend de la résolution)
+fn rows() -> u32 {
+    unsafe { *core::ptr::addr_of!(FB_HEIGHT) / 16 }
+}
 
 /// Initialise le framebuffer avec le sinfos du tag Multiboot2.
 pub fn init(fb: &crate::multiboot::FramebufferTag) {
@@ -15,6 +38,7 @@ pub fn init(fb: &crate::multiboot::FramebufferTag) {
         *core::ptr::addr_of_mut!(FB_WIDTH) = fb.width;
         *core::ptr::addr_of_mut!(FB_HEIGHT) = fb.height;
         *core::ptr::addr_of_mut!(FB_PITCH) = fb.pitch;
+        *core::ptr::addr_of_mut!(FB_ACTIVE) = true;
     }
 }
 
@@ -90,3 +114,72 @@ pub fn draw_string(x: u32, y: u32, s: &str, fg: u32, bg: u32) {
         i += 1;
     }
 }
+
+impl FbWriter {
+    /// Ecrit un octet (caractère) à la position courante du curseur.
+    pub fn write_byte(&mut self, byte: u8) {
+        match byte {
+            b'\n' => {
+                self.col = 0;
+                self.row += 1;
+                if self.row >= rows() {
+                    self.scroll();
+                }
+            }
+            byte => {
+                let x = self.col * 8;       // position pixel X
+                let y = self.row * 16;      // position pixel Y
+                draw_char(x, y, byte, FG, BG);
+                self.col += 1;
+                if self.col >= cols() {
+                    self.col = 0;
+                    self.row += 1;
+                    if self.row >= rows() {
+                        self.scroll();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Scroll : redessine tout le texte une ligne plsu haut.
+    /// On efface simplement l'écran et on remet le curseur à la dernière ligne.
+    /// (Version simple - a améliorer plsu atrd avec un vrai buffer texte)
+    pub fn scroll(&mut self) {
+        clear(BG);
+        self.row = rows() - 1;
+        self.col = 0;
+    }
+
+    /// Efface le dernier caractère tapé.
+    pub fn backspace(&mut self) {
+        if self.col > 0 {
+            self.col -= 1;
+            let x = self.col * 8;
+            let y = self.row * 16;
+            draw_char(x, y, b' ', FG, BG); // dessine un espace par-dessus
+        }
+    }
+
+    /// Efface l'écran et remet le curseur en haut à gauche.
+    pub fn clear_screen(&mut self) {
+        clear(BG);
+        self.row = 0;
+        self.col = 0;
+    }
+}
+
+impl fmt::Write for FbWriter {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for &byte in s.as_bytes() {
+            self.write_byte(byte);
+        }
+        Ok(())
+    }
+}
+
+/// Writer global du frambuffer
+pub static mut FB_WRITER: FbWriter = FbWriter {
+    row: 0,
+    col: 0,
+};

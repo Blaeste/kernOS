@@ -26,7 +26,11 @@ pub fn on_char(ch: u8) {
             unsafe {
                 if LEN > 0 {
                     LEN -= 1;
-                    (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).backspace();
+                    if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
+                        (*core::ptr::addr_of_mut!(crate::io::framebuffer::FB_WRITER)).backspace();
+                    } else {
+                        (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).backspace();
+                    }
                 }
             }
         }
@@ -63,7 +67,13 @@ fn execute(cmd: &[u8]) {
         crate::println!("  write  - cree un fichier (write nom contenu)");
         crate::println!("  rm     - supprime un fichier (rm nom)");
     } else if eq(cmd, b"clear") {
-        unsafe { (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear(); }
+        unsafe {
+            if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
+                (*core::ptr::addr_of_mut!(crate::io::framebuffer::FB_WRITER)).clear_screen();
+            } else {
+                (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear();
+            }
+        }
     } else if eq(cmd, b"reboot") {
         unsafe { asm!("out dx, al", in("dx") 0x64u16, in("al") 0xFEu8, options(nostack)); }
     } else if eq(cmd, b"uptime") {
