@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+use crate::klib::string::{eq, to_str};
+
 const MAX_CMD: usize = 78;  // 80 colonnes - 2 pour "> "
 
 static mut BUFFER: [u8; MAX_CMD] = [0; MAX_CMD];
@@ -108,10 +110,10 @@ fn execute(cmd: &[u8]) {
 
     } else if eq(cmd, b"tasks") {
         crate::println!("== Taches ==");
-        for i in 0..crate::task::MAX_TASKS {
-            let active = unsafe { (*core::ptr::addr_of!(crate::task::TASKS))[i].active };
+        for i in 0..crate::task::scheduler::MAX_TASKS {
+            let active = unsafe { (*core::ptr::addr_of!(crate::task::scheduler::TASKS))[i].active };
             if active {
-                let current = unsafe { *core::ptr::addr_of!(crate::task::CURRENT) };
+                let current = unsafe { *core::ptr::addr_of!(crate::task::scheduler::CURRENT) };
                 let marker = if i == current { " <-" } else { "" };
                 crate::println!(" [{}] active{}", i, marker);
             }
@@ -119,17 +121,6 @@ fn execute(cmd: &[u8]) {
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {
-        crate::println!("commande inconnue: {}", core::str::from_utf8(cmd).unwrap_or("???"));
+        crate::println!("commande inconnue: {}", to_str(cmd));
     }
-}
-
-// Compare deux slices d'octets (pas de == sur [u8] sans std)
-fn eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
-    let mut i = 0;
-    while i < a.len() {
-        if a[i] != b[i] { return false; }
-        i += 1;
-    }
-    true
 }

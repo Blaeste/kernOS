@@ -15,6 +15,7 @@
 extern crate alloc;
 
 // Import modules
+mod klib;
 mod io;
 mod drivers;
 mod mem;
@@ -22,6 +23,7 @@ mod interrupt;
 mod multiboot;
 mod shell;
 mod task;
+mod fs;
 
 #[global_allocator]
 static ALLOCATOR: mem::allocator::BumpAllocator = mem::allocator::BumpAllocator;
@@ -125,7 +127,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
 
     // Enregistre le kernel comme tâche 0
     unsafe {
-        (*core::ptr::addr_of_mut!(task::TASKS))[0].active = true;
+        (*core::ptr::addr_of_mut!(task::scheduler::TASKS))[0].active = true;
     }
 
     // Active les interruptions
@@ -135,8 +137,8 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     //// unsafe { core::arch::asm!("div rax", in("rax") 0u64, options(nostack)); }
 
     // Tache de test : affiche un message en boucle
-    task::spawn(task_test);
-    task::spawn(task_test2);
+    task::scheduler::spawn(task_test);
+    task::scheduler::spawn(task_test2);
 
     println!("KernOS v0.1");
 

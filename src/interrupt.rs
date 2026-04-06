@@ -178,7 +178,7 @@ pub unsafe extern "C" fn handler_page_fault() {
 pub extern "C" fn irq_timer_inner(rsp: u64) -> u64 {
 	timer::tick();
     unsafe { pic::eoi(0); }
-	crate::task::schedule(rsp)
+	crate::task::scheduler::schedule(rsp)
 }
 
 pub extern "C" fn irq_keyboard_inner() {									
