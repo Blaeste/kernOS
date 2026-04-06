@@ -80,19 +80,19 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-fn task_test() {
-    loop {
-        crate::println!("[TACHE 1] salut !");
-        for _ in 0..10_000_000 { core::hint::spin_loop(); } //  CPU attends un peu sans rien faire. boucle de temporisation
-    }
-}
+// fn task_test() {
+//     loop {
+//         crate::println!("[TACHE 1] salut !");
+//         for _ in 0..10_000_000 { core::hint::spin_loop(); } //  CPU attends un peu sans rien faire. boucle de temporisation
+//     }
+// }
 
-fn task_test2() {
-    loop {
-        crate::println!("[TACHE 2] salut !");
-        for _ in 0..10_000_000 { core::hint::spin_loop(); } //  CPU attends un peu sans rien faire. boucle de temporisation
-    }
-}
+// fn task_test2() {
+//     loop {
+//         crate::println!("[TACHE 2] salut !");
+//         for _ in 0..10_000_000 { core::hint::spin_loop(); } //  CPU attends un peu sans rien faire. boucle de temporisation
+//     }
+// }
 
 
 
@@ -137,8 +137,8 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     //// unsafe { core::arch::asm!("div rax", in("rax") 0u64, options(nostack)); }
 
     // Tache de test : affiche un message en boucle
-    task::scheduler::spawn(task_test);
-    task::scheduler::spawn(task_test2);
+    // task::scheduler::spawn(task_test);
+    // task::scheduler::spawn(task_test2);
 
     println!("KernOS v0.1");
 
