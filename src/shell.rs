@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use crate::klib::string::{eq, to_str};
+use crate::klib::string::{eq, to_str, starts_with, find_space};
 
 const MAX_CMD: usize = 78;  // 80 colonnes - 2 pour "> "
 
@@ -58,6 +58,10 @@ fn execute(cmd: &[u8]) {
         crate::println!("  frames - affiche les frames libres");
         crate::println!("  pgtest - teste la pagination");
         crate::println!("  tasks  - affiche les taches actives");
+        crate::println!("  ls     - liste les fichiers");
+        crate::println!("  cqt    - affiche un fichier (cat nom)");
+        crate::println!("  write  - cree un fichier (write nom contenu)");
+        crate::println!("  rm     - supprime un fichier (rm nom)");
     } else if eq(cmd, b"clear") {
         unsafe { (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear(); }
     } else if eq(cmd, b"reboot") {
@@ -118,6 +122,19 @@ fn execute(cmd: &[u8]) {
                 crate::println!(" [{}] active{}", i, marker);
             }
         }
+    } else if eq(cmd, b"ls") {
+        crate::fs::ramfs::ls();
+    } else if starts_with(cmd, b"cat") {
+        crate::fs::ramfs::cat(&cmd[4..]);
+    } else if starts_with(cmd, b"write") {
+        let rest = &cmd[6..];
+        if let Some(pos) = find_space(rest) {
+            crate::fs::ramfs::create(&rest[..pos], &rest[pos+1..]);
+        } else {
+            crate::println!("usage: write <nom> <contenu>");
+        }
+    } else if starts_with(cmd, b"rm") {
+        crate::fs::ramfs::rm(&cmd[3..]);
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {

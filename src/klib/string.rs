@@ -20,3 +20,19 @@ pub fn to_str_or<'a>(bytes: &'a [u8], fallback: &'a str) -> &'a str {
 pub fn to_str(bytes: &[u8]) -> &str {
     to_str_or(bytes, "???")
 }
+
+/// Vérifie si un slice commence par un préfixe
+pub fn starts_with(s: &[u8], prefix: &[u8]) -> bool {
+    if s.len() < prefix.len() { return false; }
+    eq(&s[..prefix.len()], prefix)
+}
+
+/// Trouve la position du premier espace dans un slice
+pub fn find_space(s: &[u8]) -> Option<usize> {
+    let mut i = 0;
+    while i < s.len() {
+        if s[i] == b' ' { return Some(i); }
+        i += 1;
+    }
+    None
+}
