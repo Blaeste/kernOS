@@ -22,7 +22,6 @@
 */
 
 use crate::io::framebuffer::{fill_rect, draw_string};
-use crate::io::font::FONT;
 
 /// Couleurs de la fenêtre
 const BORDER_COLOR: u32 = 0x333333;     // gris foncé
@@ -32,18 +31,84 @@ const CONTENT_BG:   u32 = 0xC0C0C0;     // gris clair
 const BORDER:       u32 = 1;            // épaisseur bordure
 const TITLE_H:      u32 = 20;           // hauteur barre de titre
 
-/// Dessine une fenêtre complète à la position (x, y) avec taille w x h
-pub fn draw_window(x: u32, y: u32, w: u32, h: u32, title: &str) {
-    // 1. Bordure (rectangle gris foncé = fond complet)
-    fill_rect(x, y, w, h, BORDER_COLOR);
+/// Nombre max de fenêtres
+const MAX_WINDOWS: usize = 8;
 
-    // 2. Barre titre (à l'intérieur de la bordure)
-    fill_rect(x + BORDER, y + BORDER, w - 2 * BORDER, TITLE_H, TITLE_BG);
+/// Longueur max du titre
+const MAX_TITLE: usize = 32;
 
-    // 3. Texte du titre (centré verticalement dans la barre, décalé de 4 px à gauche)
-    let text_y = y + BORDER + (TITLE_H - 16) / 2;
-    draw_string(x + BORDER + 4, text_y, title, TITLE_FG, TITLE_BG);
+/// Une fenetre graphique
+pub struct Window {
+    pub x:          u32,
+    pub y:          u32,
+    pub w:          u32,
+    pub h:          u32,
+    pub title:      [u8; MAX_TITLE],
+    pub title_len:  usize,
+    pub visible:    bool,
+}
 
-    // 4. Zone de contenu (sous la barre de titre)
-    fill_rect(x + BORDER, y + BORDER + TITLE_H, w - 2 * BORDER, h - 2 * BORDER - TITLE_H, CONTENT_BG);
+/// Tableau global de fenêtre
+static mut WINDOWS: [Window; MAX_WINDOWS] = [const { Window {
+    x: 0, y: 0, w: 0, h: 0,
+    title: [0; MAX_TITLE],
+    title_len: 0,
+    visible: false,
+} }; MAX_WINDOWS];
+
+static mut WINDOW_COUNT: usize = 0;
+
+/// Crée une nouvelle fenêtre et retourne son index
+pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
+    unsafe {
+        let idx = WINDOW_COUNT;
+        WINDOWS[idx].x = x;
+        WINDOWS[idx].y = y;
+        WINDOWS[idx].w = w;
+        WINDOWS[idx].h = h;
+        WINDOWS[idx].visible = true;
+
+        // Copie le titre octet par octet
+        let bytes = title.as_bytes();
+        let len = if bytes.len() < MAX_TITLE { bytes.len() } else { MAX_TITLE };
+        let mut i = 0;
+        while i < len {
+            WINDOWS[idx].title[i] = bytes[i];
+            i += 1;
+        }
+        WINDOWS[idx].title_len = len;
+
+        WINDOW_COUNT += 1;
+        idx
+    }
+}
+
+/// Dessine une seule fenêtre
+fn draw_one(win: &Window) {
+    if !win.visible { return; }
+
+    // Bordure
+    fill_rect(win.x, win.y, win.w, win.h, BORDER_COLOR);
+
+    // Barre de titre
+    fill_rect(win.x + BORDER, win.y + BORDER, win.w - 2 * BORDER, TITLE_H, TITLE_BG);
+
+    // Titre
+    let text_y = win.y + BORDER + (TITLE_H - 16) / 2;
+    let title_str = core::str::from_utf8(&win.title[..win.title_len]).unwrap_or("");
+    draw_string(win.x + BORDER + 4, text_y, title_str, TITLE_FG, TITLE_BG);
+
+    // Contenu
+    fill_rect(win.x + BORDER, win.y + BORDER + TITLE_H, win.w - 2 * BORDER, win.h - 2 * BORDER - TITLE_H, CONTENT_BG);
+}
+
+// Dessine toutes les fenêtres (z-order = odre du tableau)
+pub fn draw_all() {
+    unsafe {
+        let mut i = 0;
+        while i < WINDOW_COUNT {
+            draw_one(&WINDOWS[i]);
+            i += 1;
+        }
+    }
 }

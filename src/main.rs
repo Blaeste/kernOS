@@ -155,7 +155,9 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // task::scheduler::spawn(task_test2);
 
     // Test window
-    ui::window::draw_window(100, 100, 400, 300, "Ma fenetre");
+    ui::window::create_window(100, 80, 400, 300, "Terminal");
+    ui::window::create_window(250, 150, 350, 250, "Fichiers");
+    ui::window::draw_all();
 
     println!("KernOS v0.1");
 
