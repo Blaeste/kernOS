@@ -198,8 +198,10 @@ pub fn on_irq(byte: u8) {
                 if crate::ui::taskbar::on_click(mx, my) {
                     crate::ui::window::set_needs_redraw();
                 }
+                crate::ui::window::erase_dragged_window();
                 crate::ui::window::on_mouse_move(mx, my);
                 if crate::ui::window::is_dragging() || crate::ui::window::needs_redraw() {
+                    // Efface tout le fond pour éviter les fenêtres fantômes
                     crate::io::framebuffer::clear(crate::ui::theme::DESKTOP_BG);
                     crate::ui::window::draw_all();
                     crate::ui::taskbar::draw();

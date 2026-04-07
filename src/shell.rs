@@ -28,6 +28,7 @@ pub fn on_char(ch: u8) {
                     LEN -= 1;
                     if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
                         (*core::ptr::addr_of_mut!(crate::io::framebuffer::FB_WRITER)).backspace();
+                        crate::io::framebuffer::swap_buffers();
                     } else {
                         (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).backspace();
                     }
@@ -70,6 +71,9 @@ fn execute(cmd: &[u8]) {
         unsafe {
             if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
                 (*core::ptr::addr_of_mut!(crate::io::framebuffer::FB_WRITER)).clear_screen();
+                crate::ui::window::draw_all();
+                crate::ui::taskbar::draw();
+                crate::io::framebuffer::swap_buffers();
             } else {
                 (*core::ptr::addr_of_mut!(crate::io::vga::WRITER)).clear();
             }

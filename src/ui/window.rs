@@ -69,6 +69,9 @@ static mut Z_ORDER: [usize; MAX_WINDOWS] = [0; MAX_WINDOWS];
 
 static mut NEEDS_REDRAW: bool = false;
 
+static mut OLD_WIN_X: u32 = 0;
+static mut OLD_WIN_Y: u32 = 0;
+
 /// Crée une nouvelle fenêtre et retourne son index
 pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
     unsafe {
@@ -130,9 +133,14 @@ fn draw_one(win: &Window) {
 /// Dessine toutes les fenêtres (z-order = odre du tableau)
 pub fn draw_all() {
     unsafe {
+        let bound = (*addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win;
         let mut i = 0;
         while i < WINDOW_COUNT {
-            draw_one(&WINDOWS[Z_ORDER[i]]);
+            let idx = Z_ORDER[i];
+            draw_one(&WINDOWS[idx]);
+            if idx == bound {
+                redraw_writer_if_visible();
+            }
             i += 1;
         }
     }
@@ -169,6 +177,8 @@ pub fn on_mouse_down(mx: i32, my: i32) {
             if mx >= wx && mx < wx + ww && my >= wy && my < wy + TITLE_H as i32 + BORDER as i32 {
                 DRAGGING = true;
                 DRAG_WIN = idx;
+                *addr_of_mut!(OLD_WIN_X) = WINDOWS[idx].x;
+                *addr_of_mut!(OLD_WIN_Y) = WINDOWS[idx].y;
                 bring_to_front(idx);
                 DRAG_OFFSET_X = mx - wx;
                 DRAG_OFFSET_Y = my - wy;
@@ -203,6 +213,24 @@ pub fn on_mouse_move(mx: i32, my: i32) {
         // Verrouille la souris sur la fenêtre
         *addr_of_mut!(crate::drivers::mouse::MOUSE_X) = new_x + DRAG_OFFSET_X;
         *addr_of_mut!(crate::drivers::mouse::MOUSE_Y) = new_y + DRAG_OFFSET_Y;
+    }
+}
+
+/// Efface l'ancienne position de la fenêtre en drag (remplace par le fond)
+pub fn erase_dragged_window() {
+    unsafe {
+        if !DRAGGING { return; }
+        let ox = *addr_of!(OLD_WIN_X);
+        let oy = *addr_of!(OLD_WIN_Y);
+        let w = WINDOWS[DRAG_WIN].w;
+        let h = WINDOWS[DRAG_WIN].h;
+        crate::io::framebuffer::fill_rect(
+            ox, oy, w, h,
+            crate::ui::theme::DESKTOP_BG
+        );
+        // Sauvegarde la position courante comme "ancienne" pour le prochain appel
+        *addr_of_mut!(OLD_WIN_X) = WINDOWS[DRAG_WIN].x;
+        *addr_of_mut!(OLD_WIN_Y) = WINDOWS[DRAG_WIN].y;
     }
 }
 
@@ -258,4 +286,21 @@ pub fn bring_to_front_pub(idx: usize) {
 /// Helper set need redraw
 pub fn set_needs_redraw() {
     unsafe { NEEDS_REDRAW = true; }
+}
+
+/// Synchro position writer + redessin le text seulement si la fenetre est cisible
+pub fn redraw_writer_if_visible() {
+    unsafe {
+        let writer = &mut *addr_of_mut!(crate::io::framebuffer::FB_WRITER);
+        let idx = writer.bound_win;
+        if idx >= WINDOW_COUNT { return; }
+        let win = &WINDOWS[idx];
+        if !win.visible { return; }
+        // Sync la zone d'écriture sur la position actuelle de la fenetre
+        writer.x_origin = win.x + BORDER;
+        writer.y_origin = win.y + BORDER + TITLE_H;
+        writer.max_cols = (win.w - 2 * BORDER) / 8;
+        writer.max_rows = (win.h - 2 * BORDER - TITLE_H) / 16;
+        writer.redraw_text();
+    }
 }

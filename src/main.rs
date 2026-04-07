@@ -54,7 +54,8 @@ macro_rules! print {
         use core::fmt::Write;
         unsafe { 
             if *core::ptr::addr_of!($crate::io::framebuffer::FB_ACTIVE) {
-                write!(&mut *core::ptr::addr_of_mut!($crate::io::framebuffer::FB_WRITER), $($arg)*).unwrap() 
+                write!(&mut *core::ptr::addr_of_mut!($crate::io::framebuffer::FB_WRITER), $($arg)*).unwrap();
+                $crate::io::framebuffer::swap_buffers();
             } else {
                 write!(&mut *core::ptr::addr_of_mut!($crate::io::vga::WRITER), $($arg)*).unwrap() 
             }
@@ -155,15 +156,36 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // task::scheduler::spawn(task_test2);
 
     // Test window
-    ui::window::create_window(100, 80, 400, 300, "Terminal");
+    let term_idx = ui::window::create_window(100, 80, 400, 300, "Terminal");
+    // Lie le writer à la zone de contenue de la fenêtre Terminal
+    {
+        let border: u32 = 1;
+        let title_h: u32 = 20;
+        let wx: u32 = 100;
+        let wy: u32 = 80;
+        let ww: u32 = 400;
+        let wh: u32 = 300;
+        io::framebuffer::bind_writer_to_window(
+            wx + border,
+            wy + border + title_h,
+            ww - 2 * border,
+            wh - 2 * border - title_h,
+            term_idx,
+        );
+    }
+
+
     ui::window::create_window(250, 150, 350, 250, "Fichiers");
     ui::window::draw_all();
     ui::taskbar::draw();
-    crate::io::framebuffer::swap_buffers();
 
     println!("KernOS v0.1");
 
     shell::prompt();
+
+    crate::io::framebuffer::swap_buffers();
+
+   
 
     // centre la souris et sauvegarde les pixels sous le curseur
     drivers::mouse::init_cursor();
