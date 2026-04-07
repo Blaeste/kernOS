@@ -64,9 +64,13 @@ pub fn on_click(mx: i32, my: i32) -> bool {
                 let win = &mut crate::ui::window::WINDOWS[i];
                 if win.visible {
                     win.visible = false;
+                    if crate::ui::window::get_focused_win() == i {
+                        crate::ui::window::set_focused_win(usize::MAX);
+                    }
                 } else {
                     win.visible = true;
                     crate::ui::window::bring_to_front_pub(i);
+                    crate::ui::window::set_focused_win(i);
                 }
                 return true;
             }

@@ -68,6 +68,7 @@ static mut DRAG_OFFSET_Y:   i32 = 0;
 static mut Z_ORDER: [usize; MAX_WINDOWS] = [0; MAX_WINDOWS];
 
 static mut NEEDS_REDRAW: bool = false;
+static mut FOCUSED_WIN: usize = usize::MAX;
 
 static mut OLD_WIN_X: u32 = 0;
 static mut OLD_WIN_Y: u32 = 0;
@@ -99,7 +100,7 @@ pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
 }
 
 /// Dessine une seule fenêtre
-fn draw_one(win: &Window) {
+fn draw_one(win: &Window, idx: usize) {
     if !win.visible { return; }
 
     let x = win.x;
@@ -114,12 +115,13 @@ fn draw_one(win: &Window) {
     fill_rect(x + w - 1,    y,          BORDER, h,          WIN_BORDER);   // droite
 
     // Barre de titre
-    fill_rect(x + BORDER, y + BORDER, w - 2 * BORDER, TITLE_H, WIN_TITLE_BG);
+    let title_bg = unsafe { if FOCUSED_WIN == idx { WIN_TITLE_BG_FOCUSED } else { WIN_TITLE_BG } };
+    fill_rect(x + BORDER, y + BORDER, w - 2 * BORDER, TITLE_H, title_bg);
 
     // Titre
     let text_y = y + BORDER + (TITLE_H - 16) / 2;
     let title_str = core::str::from_utf8(&win.title[..win.title_len]).unwrap_or("");
-    draw_string(x + BORDER + 4, text_y, title_str, WIN_TITLE_FG, WIN_TITLE_BG);
+    draw_string(x + BORDER + 4, text_y, title_str, WIN_TITLE_FG, title_bg);
 
     // Bouton fermer
     let btn_x = x + w - BORDER - CLOSE_BTN_SIZE - 2;
@@ -137,7 +139,7 @@ pub fn draw_all() {
         let mut i = 0;
         while i < WINDOW_COUNT {
             let idx = Z_ORDER[i];
-            draw_one(&WINDOWS[idx]);
+            draw_one(&WINDOWS[idx], idx);
             if idx == bound {
                 redraw_writer_if_visible();
             }
@@ -169,6 +171,7 @@ pub fn on_mouse_down(mx: i32, my: i32) {
 
             if mx >= btn_x && mx < btn_x + btn_s && my >= btn_y && my < btn_y + btn_s {
                 WINDOWS[idx].visible = false;
+                if FOCUSED_WIN == idx { FOCUSED_WIN = usize::MAX; }
                 NEEDS_REDRAW = true;
                 return;
             }
@@ -182,9 +185,14 @@ pub fn on_mouse_down(mx: i32, my: i32) {
                 bring_to_front(idx);
                 DRAG_OFFSET_X = mx - wx;
                 DRAG_OFFSET_Y = my - wy;
+                FOCUSED_WIN = idx;
+                NEEDS_REDRAW = true;
                 return;
             }
         }
+        // CLic hors de toute fenêtre -> perd le focus
+        FOCUSED_WIN = usize::MAX;
+        NEEDS_REDRAW = true;
     }
 }
 
@@ -303,4 +311,14 @@ pub fn redraw_writer_if_visible() {
         writer.max_rows = (win.h - 2 * BORDER - TITLE_H) / 16;
         writer.redraw_text();
     }
+}
+
+/// get focused window
+pub fn get_focused_win() -> usize {
+    unsafe { FOCUSED_WIN }
+}
+
+/// set focused window
+pub fn set_focused_win(idx: usize) {
+    unsafe { FOCUSED_WIN = idx; }
 }

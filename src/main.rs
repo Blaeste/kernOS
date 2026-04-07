@@ -157,6 +157,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
 
     // Test window
     let term_idx = ui::window::create_window(100, 80, 400, 300, "Terminal");
+    ui::window::set_focused_win(term_idx);
     // Lie le writer à la zone de contenue de la fenêtre Terminal
     {
         let border: u32 = 1;

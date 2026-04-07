@@ -71,6 +71,10 @@ pub fn on_key(scancode: u8) {
             return; // Escape et touches speciales -> ignorer
         }
 
-        crate::shell::on_char(ch);
+        let focused = crate::ui::window::get_focused_win();
+        let bound = unsafe { (*core::ptr::addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win };
+        if focused == bound {
+            crate::shell::on_char(ch);
+        }
     }
 }
