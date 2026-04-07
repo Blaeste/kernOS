@@ -68,17 +68,19 @@ Si le tag n'existe pas (QEMU sans `-vga std`), on reste en mode VGA texte.
 | `FB_WIDTH` | `u32` | Largeur en pixels (800) |
 | `FB_HEIGHT` | `u32` | Hauteur en pixels (600) |
 | `FB_ACTIVE` | `bool` | `true` si le framebuffer est disponible |
-| `BACK_BUF` | `[u8; 800×600×4]` | Buffer arrière pour le double buffering |
+| `BACK_BUF` | `[u32; 2_073_600]` | Buffer arrière pour le double buffering (max 1920×1080) |
 
 ### Fonctions graphiques
 
 | Fonction | Rôle |
 |---|---|
 | `init(tag: &FramebufferTag)` | Initialise les variables globales avec les infos du tag |
-| `put_pixel(x, y, color)` | Écrit un pixel BGRA dans le back buffer |
+| `put_pixel(x, y, color)` | Écrit un pixel dans le back buffer |
+| `put_pixel_direct(x, y, color)` | Écrit un pixel directement au framebuffer (sans back buffer) |
 | `get_pixel(x, y) → u32` | Lit un pixel depuis le back buffer |
 | `fill_rect(x, y, w, h, color)` | Remplit un rectangle de pixels |
-| `clear(color)` | Remplit tout l'écran d'une couleur |
+| `clear(color)` | Remplit tout le back buffer d'une couleur |
+| `swap_buffers()` | Copie le back buffer vers le framebuffer (ligne par ligne via `copy_nonoverlapping`) |
 | `draw_char(x, y, c, fg, bg)` | Dessine un caractère 8×16 à la position pixel |
 | `draw_string(x, y, s, fg, bg)` | Dessine une chaîne de caractères pixel par pixel |
 
@@ -170,25 +172,36 @@ Le fallback VGA garantit que le kernel peut toujours afficher du texte même si 
 On dessine dans un **buffer arrière** (`BACK_BUF`) en RAM, puis on copie tout d'un coup dans le framebuffer :
 
 ```rust
-pub static mut BACK_BUF: [u8; 800 * 600 * 4] = [0; 800 * 600 * 4];
+static mut BACK_BUF: [u32; 2_073_600] = [0; 2_073_600]; // max 1920×1080
 
 pub fn swap_buffers() {
     unsafe {
-        core::ptr::copy_nonoverlapping(
-            BACK_BUF.as_ptr(),
-            FB_PTR,
-            (FB_HEIGHT * FB_PITCH) as usize,
-        );
+        let mut y = 0;
+        while y < h {
+            let src = addr_of!(BACK_BUF).cast::<u32>().add(y * w);
+            let dst = addr.add(y * pitch / 4);
+            core::ptr::copy_nonoverlapping(src, dst, w);
+            y += 1;
+        }
     }
 }
 ```
 
+### Double buffering sélectif
+
+`swap_buffers()` copie tout l'écran → coûteux. On ne l'appelle que quand nécessaire (pendant le drag). Pour le curseur seul, on utilise `put_pixel_direct` qui écrit directement au framebuffer sans passer par le back buffer → rapide, pas de swap nécessaire.
+
 ### Flux
 
 ```
+Pendant le drag :
 1. clear(BACK_BUF)                → efface le back buffer
-2. draw_all() dans BACK_BUF       → dessine fenêtres, texte, curseur
-3. swap_buffers()                  → copie BACK_BUF → framebuffer (GPU)
+2. draw_all() dans BACK_BUF       → dessine fenêtres
+3. dessiner curseur dans BACK_BUF
+4. swap_buffers()                  → copie BACK_BUF → framebuffer
+
+Curseur seul (pas de drag) :
+1. put_pixel_direct() pour effacer/dessiner le curseur → direct au framebuffer
 ```
 
 L'utilisateur ne voit jamais d'image incomplète.

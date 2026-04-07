@@ -196,10 +196,11 @@ pub fn on_irq(byte: u8) {
             if btn_left {
                 crate::ui::window::on_mouse_down(mx, my);
                 crate::ui::window::on_mouse_move(mx, my);
-                // Redessine seulement si on drag
-                crate::io::framebuffer::clear(0x005577);
-                crate::ui::window::draw_all();
-                redrawn = true;
+                if crate::ui::window::is_dragging() {
+                    crate::io::framebuffer::clear(0x005577);
+                    crate::ui::window::draw_all();
+                    redrawn = true;
+                }
             } else {
                 crate::ui::window::on_mouse_up();
             }
@@ -214,6 +215,7 @@ pub fn on_irq(byte: u8) {
                     let mut j = 0;
                     while j < CURSOR_W {
                         crate::io::framebuffer::put_pixel(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
+                        crate::io::framebuffer::put_pixel_direct(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
                         j += 1;
                     }
                     i += 1;
@@ -241,14 +243,17 @@ pub fn on_irq(byte: u8) {
                 while j < CURSOR_W {
                     if (row >> (15 - j)) & 1 == 1 {
                         crate::io::framebuffer::put_pixel(nx + j, ny + i, 0xFFFFFF);
+                        crate::io::framebuffer::put_pixel_direct(nx + j, ny + i, 0xFFFFFF);
                     }
                     j += 1;
                 }
                 i += 1;
             }
 
-            // Affiche tout d'un coup (double buffering)
-            crate::io::framebuffer::swap_buffers();
+            // Affiche tout d'un coup seulement si on a redessiné
+            if redrawn {
+                crate::io::framebuffer::swap_buffers();
+            }
 
             // Sauvegarde la position actuelle
             *addr_of_mut!(OLD_MOUSE_X) = *addr_of!(MOUSE_X);

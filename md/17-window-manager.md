@@ -16,17 +16,17 @@ Le window manager permet d'afficher des **fenêtres graphiques** à l'écran et 
 
 ### Sprite du curseur
 
-Le curseur est une **flèche 12×16 pixels** définie comme un tableau constant :
+Le curseur est une **flèche 12×16 pixels** définie comme un tableau de `u16` :
 
 ```rust
-pub static CURSOR_SHAPE: [[u8; 12]; 16] = [
-    // 1 = pixel blanc, 2 = pixel noir (contour), 0 = transparent
-    [1,0,0,0,0,0,0,0,0,0,0,0],
-    [1,1,0,0,0,0,0,0,0,0,0,0],
-    [1,2,1,0,0,0,0,0,0,0,0,0],
-    // ... forme de flèche classique
+static CURSOR_SHAPE: [u16; 16] = [
+    0b1000_0000_0000_0000,  // X
+    0b1100_0000_0000_0000,  // XX
+    // ... chaque bit = 1 pixel blanc, 0 = transparent
 ];
 ```
+
+Le bit de poids fort (0x8000) = pixel le plus à gauche. Seuls les bits à 1 sont dessinés en blanc.
 
 ### Dessin du curseur
 
@@ -48,12 +48,13 @@ pub static CURSOR_SHAPE: [[u8; 12]; 16] = [
 
 ```rust
 pub struct Window {
-    pub x:       i32,       // position X (coin supérieur gauche)
-    pub y:       i32,       // position Y
-    pub w:       u32,       // largeur
-    pub h:       u32,       // hauteur
-    pub title:   &'static str,  // titre affiché dans la barre
-    pub visible: bool,      // fenêtre affichée ou masquée
+    pub x:         u32,              // position X (coin supérieur gauche)
+    pub y:         u32,              // position Y
+    pub w:         u32,              // largeur
+    pub h:         u32,              // hauteur
+    pub title:     [u8; MAX_TITLE],  // titre (copié, pas de référence)
+    pub title_len: usize,           // longueur du titre
+    pub visible:   bool,            // fenêtre affichée ou masquée
 }
 ```
 
@@ -65,6 +66,7 @@ pub struct Window {
 |---|---|---|
 | `WINDOWS` | `[Window; 8]` | Tableau fixe de 8 fenêtres max |
 | `WINDOW_COUNT` | `usize` | Nombre de fenêtres actuellement créées |
+| `Z_ORDER` | `[usize; 8]` | Ordre d'affichage (indices dans WINDOWS) |
 
 ### Fonctions
 
@@ -76,16 +78,21 @@ pub struct Window {
 
 ### Z-order
 
-L'ordre d'affichage suit l'index dans le tableau `WINDOWS` :
+L'ordre d'affichage est géré par le tableau `Z_ORDER` (indices dans `WINDOWS`) :
 
 ```
-WINDOWS[0]  → dessinée en premier  → en arrière-plan
-WINDOWS[1]  → dessinée par-dessus
+Z_ORDER[0]  → première fenêtre dessinée → en arrière-plan
+Z_ORDER[1]  → dessinée par-dessus
 ...
-WINDOWS[n]  → dessinée en dernier  → au premier plan
+Z_ORDER[n]  → dessinée en dernier       → au premier plan
 ```
 
-La fenêtre avec l'index le plus élevé est toujours devant.
+Quand on clique sur une fenêtre, `bring_to_front(idx)` déplace son index en dernière position de `Z_ORDER`. Cela ne copie qu'un `usize`, pas la struct `Window` entière → performant.
+
+| Fonction | Rôle |
+|---|---|
+| `bring_to_front(idx)` | Déplace l'index de la fenêtre en fin de `Z_ORDER` |
+| `is_dragging()` | Retourne `true` si un drag est en cours |
 
 ## Drag & Drop
 
@@ -152,8 +159,10 @@ Le drag s'arrête. La fenêtre reste à sa nouvelle position.
 ## Points techniques
 
 - **Tableau fixe [Window; 8]** : pas d'allocation dynamique, tout est statique — adapté au bare-metal
+- **Z_ORDER séparé** : au lieu de déplacer les structs Window, on déplace seulement les indices → pas de lag
 - **Parcours inverse pour le clic** : on teste la fenêtre devant en premier, comme dans un vrai window manager
 - **DRAG_OFFSET** : sans l'offset, la fenêtre "sauterait" vers le curseur au début du drag — avec l'offset, elle suit naturellement
-- **Clamp** : empêche la souris et les fenêtres de sortir des bords de l'écran (0 ≤ x < FB_WIDTH, 0 ≤ y < FB_HEIGHT)
-- **Double buffering** : tout le rendu passe par `BACK_BUF` → `swap_buffers()`, donc pas de scintillement pendant le drag
-- **Z-order simple** : l'ordre du tableau = l'ordre d'affichage, pas de système de focus complexe
+- **Verrouillage souris** : pendant le drag, `on_mouse_move` force `MOUSE_X/Y` pour que la souris reste collée à la fenêtre quand elle touche un bord
+- **Clamp** : empêche la souris et les fenêtres de sortir des bords de l'écran
+- **Double buffering sélectif** : `swap_buffers()` seulement pendant le drag. Le curseur seul utilise `put_pixel_direct` pour écrire directement au framebuffer → pas de lag
+- **`if DRAGGING { return; }` dans on_mouse_down** : empêche de changer de fenêtre pendant un drag en cours

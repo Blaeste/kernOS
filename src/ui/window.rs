@@ -65,6 +65,8 @@ static mut DRAG_WIN:        usize = 0;
 static mut DRAG_OFFSET_X:   i32 = 0;
 static mut DRAG_OFFSET_Y:   i32 = 0;
 
+static mut Z_ORDER: [usize; MAX_WINDOWS] = [0; MAX_WINDOWS];
+
 /// Crée une nouvelle fenêtre et retourne son index
 pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
     unsafe {
@@ -85,6 +87,7 @@ pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
         }
         WINDOWS[idx].title_len = len;
 
+        Z_ORDER[WINDOW_COUNT] = WINDOW_COUNT;
         WINDOW_COUNT += 1;
         idx
     }
@@ -114,7 +117,7 @@ pub fn draw_all() {
     unsafe {
         let mut i = 0;
         while i < WINDOW_COUNT {
-            draw_one(&WINDOWS[i]);
+            draw_one(&WINDOWS[Z_ORDER[i]]);
             i += 1;
         }
     }
@@ -139,6 +142,7 @@ pub fn on_mouse_down(mx: i32, my: i32) {
             if mx >= wx && mx < wx + ww && my >= wy && my < wy + TITLE_H as i32 + BORDER as i32 {
                 DRAGGING = true;
                 DRAG_WIN = i;
+                bring_to_front(i);
                 DRAG_OFFSET_X = mx - wx;
                 DRAG_OFFSET_Y = my - wy;
                 return;
@@ -179,4 +183,29 @@ pub fn on_mouse_up() {
     unsafe {
         DRAGGING = false;
     }
+}
+
+/// Amène la fenêtre idx au premier plan (dernière dans le z-order)
+unsafe fn bring_to_front(idx: usize) {
+    unsafe {
+        let mut pos = 0;
+        while pos < WINDOW_COUNT {
+            if Z_ORDER[pos] == idx { break; }
+            pos += 1;
+        }
+        if pos >= WINDOW_COUNT - 1 { return; }
+
+        let saved = Z_ORDER[pos];
+        let mut i = pos;
+        while i < WINDOW_COUNT - 1 {
+            Z_ORDER[i] = Z_ORDER[i + 1];
+            i += 1;
+        }
+        Z_ORDER[WINDOW_COUNT - 1] = saved;
+    }
+}
+
+/// Retourne true si une fenêtre est en cours de déplacement
+pub fn is_dragging() -> bool {
+    unsafe { DRAGGING }
 }
