@@ -24,11 +24,9 @@
 use crate::io::framebuffer::{fill_rect, draw_string};
 use core::ptr::{addr_of, addr_of_mut};
 
-/// Couleurs de la fenêtre
-const BORDER_COLOR: u32 = 0x333333;     // gris foncé
-const TITLE_BG:     u32 = 0x336699;     // bleu
-const TITLE_FG:     u32 = 0xFFFFFF;     // blanc
-const CONTENT_BG:   u32 = 0xC0C0C0;     // gris clair
+use crate::ui::theme::*;
+
+/// Fenêtre
 const BORDER:       u32 = 1;            // épaisseur bordure
 const TITLE_H:      u32 = 20;           // hauteur barre de titre
 
@@ -52,14 +50,14 @@ pub struct Window {
 }
 
 /// Tableau global de fenêtre
-static mut WINDOWS: [Window; MAX_WINDOWS] = [const { Window {
+pub static mut WINDOWS: [Window; MAX_WINDOWS] = [const { Window {
     x: 0, y: 0, w: 0, h: 0,
     title: [0; MAX_TITLE],
     title_len: 0,
     visible: false,
 } }; MAX_WINDOWS];
 
-static mut WINDOW_COUNT: usize = 0;
+pub static mut WINDOW_COUNT: usize = 0;
 
 // ── Drag & drop ─────────────────────────────────────────────────────────
 static mut DRAGGING:        bool = false;
@@ -107,26 +105,26 @@ fn draw_one(win: &Window) {
     let h = win.h;
 
     // 4 bordures (1px) - seulement les bords, pas le fond entier (no redrawn)
-    fill_rect(x,            y,          w,      BORDER,     BORDER_COLOR);   // haut
-    fill_rect(x,            y + h - 1,  w,      BORDER,     BORDER_COLOR);   // bas
-    fill_rect(x,            y,          BORDER, h,          BORDER_COLOR);   // gauche
-    fill_rect(x + w - 1,    y,          BORDER, h,          BORDER_COLOR);   // droite
+    fill_rect(x,            y,          w,      BORDER,     WIN_BORDER);   // haut
+    fill_rect(x,            y + h - 1,  w,      BORDER,     WIN_BORDER);   // bas
+    fill_rect(x,            y,          BORDER, h,          WIN_BORDER);   // gauche
+    fill_rect(x + w - 1,    y,          BORDER, h,          WIN_BORDER);   // droite
 
     // Barre de titre
-    fill_rect(x + BORDER, y + BORDER, w - 2 * BORDER, TITLE_H, TITLE_BG);
+    fill_rect(x + BORDER, y + BORDER, w - 2 * BORDER, TITLE_H, WIN_TITLE_BG);
 
     // Titre
     let text_y = y + BORDER + (TITLE_H - 16) / 2;
     let title_str = core::str::from_utf8(&win.title[..win.title_len]).unwrap_or("");
-    draw_string(x + BORDER + 4, text_y, title_str, TITLE_FG, TITLE_BG);
+    draw_string(x + BORDER + 4, text_y, title_str, WIN_TITLE_FG, WIN_TITLE_BG);
 
     // Bouton fermer
     let btn_x = x + w - BORDER - CLOSE_BTN_SIZE - 2;
     let btn_y =  y + BORDER + (TITLE_H - CLOSE_BTN_SIZE) / 2;
-    fill_rect(btn_x, btn_y, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE, 0xFF3333);
+    fill_rect(btn_x, btn_y, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE, WIN_CLOSE);
 
     // Contenu
-    fill_rect(x + BORDER, y + BORDER + TITLE_H, w - 2 * BORDER, h - 2 * BORDER - TITLE_H, CONTENT_BG);
+    fill_rect(x + BORDER, y + BORDER + TITLE_H, w - 2 * BORDER, h - 2 * BORDER - TITLE_H, WIN_CONTENT);
 }
 
 /// Dessine toutes les fenêtres (z-order = odre du tableau)
@@ -193,10 +191,11 @@ pub fn on_mouse_move(mx: i32, my: i32) {
         let wh = WINDOWS[DRAG_WIN].h as i32;
 
         // Clamp : empêche la fenêtre de sortir de l'écran
+        let taskbar_h = crate::ui::taskbar::TASKBAR_H as i32;
         if new_x < 0 { new_x = 0; }
         if new_y < 0 { new_y = 0; }
         if new_x + ww > sw { new_x = sw - ww; }
-        if new_y + wh > sh { new_y = sh - wh; }
+        if new_y + wh > sh - taskbar_h { new_y = sh - taskbar_h - wh; }
 
         WINDOWS[DRAG_WIN].x = new_x as u32;
         WINDOWS[DRAG_WIN].y = new_y as u32;
@@ -249,4 +248,14 @@ pub fn needs_redraw() -> bool {
             false
         }
     }
+}
+
+/// Wrapper public pour bring_to_front
+pub fn bring_to_front_pub(idx: usize) {
+    unsafe { bring_to_front(idx); }
+}
+
+/// Helper set need redraw
+pub fn set_needs_redraw() {
+    unsafe { NEEDS_REDRAW = true; }
 }

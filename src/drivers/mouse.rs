@@ -195,10 +195,14 @@ pub fn on_irq(byte: u8) {
             let mut redrawn = false;
             if btn_left {
                 crate::ui::window::on_mouse_down(mx, my);
+                if crate::ui::taskbar::on_click(mx, my) {
+                    crate::ui::window::set_needs_redraw();
+                }
                 crate::ui::window::on_mouse_move(mx, my);
                 if crate::ui::window::is_dragging() || crate::ui::window::needs_redraw() {
-                    crate::io::framebuffer::clear(0x003366);
+                    crate::io::framebuffer::clear(crate::ui::theme::DESKTOP_BG);
                     crate::ui::window::draw_all();
+                    crate::ui::taskbar::draw();
                     redrawn = true;
                 }
             } else {

@@ -17,7 +17,7 @@ static mut BACK_BUF:        [u32; 2_073_600] = [0; 2_073_600];
 
 /// Couleurs par défault du texte
 const FG:                   u32 = 0xFFFFFF; // blanc
-const BG:                   u32 = 0x003366; // bleu foncé (fond)
+const BG:                   u32 = crate::ui::theme::DESKTOP_BG; // bleu foncé (fond)
 
 /// Writer framebuffer - gère un curseur texte et dessine avec la police bitmap.
 pub struct FbWriter {
