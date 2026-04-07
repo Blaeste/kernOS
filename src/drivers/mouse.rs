@@ -196,8 +196,8 @@ pub fn on_irq(byte: u8) {
             if btn_left {
                 crate::ui::window::on_mouse_down(mx, my);
                 crate::ui::window::on_mouse_move(mx, my);
-                if crate::ui::window::is_dragging() {
-                    crate::io::framebuffer::clear(0x005577);
+                if crate::ui::window::is_dragging() || crate::ui::window::needs_redraw() {
+                    crate::io::framebuffer::clear(0x003366);
                     crate::ui::window::draw_all();
                     redrawn = true;
                 }

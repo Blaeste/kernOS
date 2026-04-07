@@ -38,6 +38,8 @@ const MAX_WINDOWS: usize = 8;
 /// Longueur max du titre
 const MAX_TITLE: usize = 32;
 
+const CLOSE_BTN_SIZE: u32 = 14; // taille bouton fermer
+
 /// Une fenetre graphique
 pub struct Window {
     pub x:          u32,
@@ -66,6 +68,8 @@ static mut DRAG_OFFSET_X:   i32 = 0;
 static mut DRAG_OFFSET_Y:   i32 = 0;
 
 static mut Z_ORDER: [usize; MAX_WINDOWS] = [0; MAX_WINDOWS];
+
+static mut NEEDS_REDRAW: bool = false;
 
 /// Crée une nouvelle fenêtre et retourne son index
 pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
@@ -97,19 +101,32 @@ pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
 fn draw_one(win: &Window) {
     if !win.visible { return; }
 
-    // Bordure
-    fill_rect(win.x, win.y, win.w, win.h, BORDER_COLOR);
+    let x = win.x;
+    let y = win.y;
+    let w = win.w;
+    let h = win.h;
+
+    // 4 bordures (1px) - seulement les bords, pas le fond entier (no redrawn)
+    fill_rect(x,            y,          w,      BORDER,     BORDER_COLOR);   // haut
+    fill_rect(x,            y + h - 1,  w,      BORDER,     BORDER_COLOR);   // bas
+    fill_rect(x,            y,          BORDER, h,          BORDER_COLOR);   // gauche
+    fill_rect(x + w - 1,    y,          BORDER, h,          BORDER_COLOR);   // droite
 
     // Barre de titre
-    fill_rect(win.x + BORDER, win.y + BORDER, win.w - 2 * BORDER, TITLE_H, TITLE_BG);
+    fill_rect(x + BORDER, y + BORDER, w - 2 * BORDER, TITLE_H, TITLE_BG);
 
     // Titre
-    let text_y = win.y + BORDER + (TITLE_H - 16) / 2;
+    let text_y = y + BORDER + (TITLE_H - 16) / 2;
     let title_str = core::str::from_utf8(&win.title[..win.title_len]).unwrap_or("");
-    draw_string(win.x + BORDER + 4, text_y, title_str, TITLE_FG, TITLE_BG);
+    draw_string(x + BORDER + 4, text_y, title_str, TITLE_FG, TITLE_BG);
+
+    // Bouton fermer
+    let btn_x = x + w - BORDER - CLOSE_BTN_SIZE - 2;
+    let btn_y =  y + BORDER + (TITLE_H - CLOSE_BTN_SIZE) / 2;
+    fill_rect(btn_x, btn_y, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE, 0xFF3333);
 
     // Contenu
-    fill_rect(win.x + BORDER, win.y + BORDER + TITLE_H, win.w - 2 * BORDER, win.h - 2 * BORDER - TITLE_H, CONTENT_BG);
+    fill_rect(x + BORDER, y + BORDER + TITLE_H, w - 2 * BORDER, h - 2 * BORDER - TITLE_H, CONTENT_BG);
 }
 
 /// Dessine toutes les fenêtres (z-order = odre du tableau)
@@ -131,18 +148,30 @@ pub fn on_mouse_down(mx: i32, my: i32) {
         let mut i = WINDOW_COUNT;
         while i > 0 {
             i -= 1;
-            let win = &WINDOWS[i];
+            let idx = Z_ORDER[i];
+            let win = &WINDOWS[idx];
             if !win.visible { continue; }
 
             let wx = win.x as i32;
             let wy = win.y as i32;
             let ww = win.w as i32;
 
-            // Est-ce que le clic est dans la abrre de titre ?
+            // Bouton fermer ?
+            let btn_x = (win.x + win.w - BORDER - CLOSE_BTN_SIZE - 2) as i32;
+            let btn_y = (win.y + BORDER + (TITLE_H - CLOSE_BTN_SIZE) / 2) as i32;
+            let btn_s = CLOSE_BTN_SIZE as i32;
+
+            if mx >= btn_x && mx < btn_x + btn_s && my >= btn_y && my < btn_y + btn_s {
+                WINDOWS[idx].visible = false;
+                NEEDS_REDRAW = true;
+                return;
+            }
+
+            // Est-ce que le clic est dans la barre de titre ?
             if mx >= wx && mx < wx + ww && my >= wy && my < wy + TITLE_H as i32 + BORDER as i32 {
                 DRAGGING = true;
-                DRAG_WIN = i;
-                bring_to_front(i);
+                DRAG_WIN = idx;
+                bring_to_front(idx);
                 DRAG_OFFSET_X = mx - wx;
                 DRAG_OFFSET_Y = my - wy;
                 return;
@@ -208,4 +237,16 @@ unsafe fn bring_to_front(idx: usize) {
 /// Retourne true si une fenêtre est en cours de déplacement
 pub fn is_dragging() -> bool {
     unsafe { DRAGGING }
+}
+
+/// Retourne bool si besoin de redrw ou pas
+pub fn needs_redraw() -> bool {
+    unsafe {
+        if NEEDS_REDRAW {
+            NEEDS_REDRAW = false;
+            true
+        } else {
+            false
+        }
+    }
 }
