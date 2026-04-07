@@ -140,6 +140,9 @@ pub fn draw_all() {
         while i < WINDOW_COUNT {
             let idx = Z_ORDER[i];
             draw_one(&WINDOWS[idx], idx);
+            if idx == crate::ui::filewin::FILE_WIN_IDX {
+                crate::ui::filewin::draw();
+            }
             if idx == bound {
                 redraw_writer_if_visible();
             }

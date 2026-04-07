@@ -121,3 +121,13 @@ pub fn rm(name: &[u8]) {
     }
     crate::println!("fichier introuvable: {}", to_str(name));
 }
+
+/// fonction list pour itérer sans println
+pub fn list(mut cb: impl FnMut(&[u8], usize)) {
+    for i in 0..MAX_FILES {
+        let f = &files()[i];
+        if f.used {
+            cb(&f.name[..name_len(&f.name)], f.size);
+        }
+    }
+}
