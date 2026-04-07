@@ -192,6 +192,16 @@ pub fn on_mouse_down(mx: i32, my: i32) {
                 NEEDS_REDRAW = true;
                 return;
             }
+
+            // CLic dans la zone contenu ?
+            let content_y = wy + TITLE_H as i32 +  BORDER as i32;
+            let wh = win.h as i32;
+            if mx >= wx && mx < wx + ww && my >= content_y && my < wy + wh {
+                FOCUSED_WIN = idx;
+                bring_to_front(idx);
+                NEEDS_REDRAW = true;
+                return;
+            }
         }
         // CLic hors de toute fenêtre -> perd le focus
         FOCUSED_WIN = usize::MAX;

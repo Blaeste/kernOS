@@ -200,9 +200,12 @@ pub fn on_irq(byte: u8) {
                 }
                 crate::ui::window::erase_dragged_window();
                 crate::ui::window::on_mouse_move(mx, my);
-                if crate::ui::window::is_dragging() || crate::ui::window::needs_redraw() {
-                    // Efface tout le fond pour éviter les fenêtres fantômes
-                    crate::io::framebuffer::clear(crate::ui::theme::DESKTOP_BG);
+                let need_redraw = crate::ui::window::needs_redraw();
+                if crate::ui::window::is_dragging() || need_redraw {
+                    if need_redraw {
+                        // Efface tout le fond pour éviter les fenêtres fantômes
+                        crate::io::framebuffer::clear(crate::ui::theme::DESKTOP_BG);
+                    }
                     crate::ui::window::draw_all();
                     crate::ui::taskbar::draw();
                     redrawn = true;
