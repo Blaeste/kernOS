@@ -14,7 +14,7 @@
 */
 
 use crate::io::framebuffer::{fill_rect, draw_string};
-use crate::klib::string::to_str;
+use crate::klib::string::{to_str, to_str_or};
 use core::ptr::addr_of;
 
 use crate::ui::theme::*;
@@ -46,6 +46,27 @@ pub fn draw() {
             draw_string(btn_x + 4, btn_y + (BTN_H - 16) / 2, title_str, BTN_FG, color);
             i += 1;
         }
+
+        // Uptime à droite
+        let ticks = crate::drivers::timer::get_ticks();
+        let secs = ticks / 100;
+        let mins = secs / 60;
+        let s = secs % 60;
+
+        // Convertir en string "MM::SS"
+        let mut buf = [0u8; 8];
+        buf[0] = b'0' + (mins / 10) as u8;
+        buf[1] = b'0' + (mins % 10) as u8;
+        buf[2] = b':';
+        buf[3] = b'0' + (s / 10) as u8;
+        buf[4] = b'0' + (s % 10) as u8;
+        let time_str = to_str_or(&buf[..5], "00:00");
+
+        let clock_w: u32 = 5 * 8 + 8; // 5 chars * 8px + padding;
+        let clock_x = sw - clock_w - 4;
+        let clock_y = sh - TASKBAR_H + (TASKBAR_H - 16) / 2;
+        fill_rect(clock_x - 4, sh - TASKBAR_H + 4, clock_w + 4, BTN_H, TASKBAR_BG);
+        draw_string(clock_x, clock_y, time_str, BTN_FG, TASKBAR_BG);
     }
 }
 

@@ -26,6 +26,14 @@ pub fn tick() {
     unsafe {
         let ptr = core::ptr::addr_of_mut!(TICKS);
         *ptr += 1;
+
+        // Mise à jour horloge chaque seconde (100 ticks)
+        if *ptr % 100 == 0 {
+            if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
+                crate::ui::taskbar::draw();
+                crate::io::framebuffer::swap_buffers();
+            }
+        }
     }
 }
 
