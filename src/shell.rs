@@ -54,21 +54,26 @@ pub fn on_char(ch: u8) {
 
 fn execute(cmd: &[u8]) {
     if eq(cmd, b"help") {
-        crate::println!("Commandes disponibles :");
-        crate::println!("  help   - affiche cette aide");
-        crate::println!("  clear  - efface l'ecran");
-        crate::println!("  reboot - redemarre la machine");
-        crate::println!("  uptime - temps depuis le demarrage");
-        crate::println!("  memmap - affiche la carte memoire");
-        crate::println!("  frames - affiche les frames libres");
-        crate::println!("  pgtest - teste la pagination");
-        crate::println!("  tasks  - affiche les taches actives");
-        crate::println!("  ls     - liste les fichiers");
-        crate::println!("  cqt    - affiche un fichier (cat nom)");
-        crate::println!("  write  - cree un fichier (write nom contenu)");
-        crate::println!("  rm     - supprime un fichier (rm nom)");
-        crate::println!("  ataRead  - lit le secteur 0");
-        crate::println!("  ataWrite - ecrit dans le secteur 0");
+        crate::println!(concat!(
+            "Commandes disponibles :\n",
+            "  help     - affiche cette aide\n",
+            "  clear    - efface l'ecran\n",
+            "  reboot   - redemarre la machine\n",
+            "  uptime   - temps depuis le demarrage\n",
+            "  memmap   - affiche la carte memoire\n",
+            "  frames   - affiche les frames libres\n",
+            "  pgtest   - teste la pagination\n",
+            "  tasks    - affiche les taches actives\n",
+            "  ls       - liste les fichiers\n",
+            "  cat      - affiche un fichier (cat nom)\n",
+            "  write    - cree un fichier (write nom contenu)\n",
+            "  rm       - supprime un fichier (rm nom)\n",
+            "  ataRead  - lit le secteur 0\n",
+            "  ataWrite - ecrit dans le secteur 0\n",
+            "  kfsLs    - liste fichiers disque\n",
+            "  kfsWrite - ecrit sur disque (kfsWrite nom contenu)\n",
+            "  kfsRead  - lit depuis disque (kfsRead nom)",
+        ));
     } else if eq(cmd, b"clear") {
         unsafe {
             if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {

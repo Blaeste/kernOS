@@ -157,7 +157,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // task::scheduler::spawn(task_test2);
 
     // Test window
-    let term_idx = ui::window::create_window(100, 80, 400, 300, "Terminal");
+    let term_idx = ui::window::create_window(10, 10, 400, 800, "Terminal");
     ui::window::set_focused_win(term_idx);
     // Lie le writer à la zone de contenue de la fenêtre Terminal
     {
@@ -177,7 +177,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     }
 
 
-    ui::window::create_window(250, 150, 350, 250, "Fichiers");
+    ui::window::create_window(420, 10, 400, 800, "Fichiers");
     ui::window::draw_all();
     ui::taskbar::draw();
     ui::filewin::draw();
