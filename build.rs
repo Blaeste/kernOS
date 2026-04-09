@@ -25,7 +25,7 @@ fn main() {
     fs::create_dir_all("target/isodir/boot/grub").unwrap();
 
     fs::write("target/isodir/boot/grub/grub.cfg",
-        "set timeout=0\nset default=0\n\nmenuentry \"KernOS\" {\n    multiboot2 /boot/kernos\n    boot\n}\n"
+        "set timeout=0\nset default=0\nset gfxmode=1920x1080x32\nset gfxpayload=keep\n\nmenuentry \"KernOS\" {\n    multiboot2 /boot/kernos\n    boot\n}\n"
     ).unwrap();
 
     // 3. Copie le kernel (aprees compilation)

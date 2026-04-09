@@ -17,8 +17,8 @@ header_start:
 	dw 5																; type = 5 -> framebuffer request
 	dw 0																; flags = 0 -> optionnel (GRUB boote quand même si impossible)
 	dd 20																; taille du tag = 20 octets (header 8 + 3 x u32)
-	dd 800																; largeur voulue : 800 pixels
-	dd 600																; hauteur voulue : 600 pixels
+	dd 1920																; largeur voulue : 800 pixels
+	dd 1080																; hauteur voulue : 600 pixels
 	dd 32																; profondeur : 32 bits par pixel (R8 G8 B8 A8)
 
 	; --- Tag fin ---
@@ -73,13 +73,13 @@ _start32:
 	wrmsr								; écrit le nouveau MSR IA32_EFER avec le long mode activé
 
 	mov eax, cr0						; active la protection (bit 0 = PE) et le long mode (bit 31 = PG)
-	or eax, 1 << 31						; bit 31 = PG (Paging) — active la pagination, nécessaire pour le long mode	
+	or eax, 1 << 31						; bit 31 = PG (Paging) — active la pagination, nécessaire pour le long mode
 	mov cr0, eax						; cr0 = cr0 | (1 << 31) pour activer la pagination
 
 	lgdt [gdt64.pointer]				; charge la GDT (Global Descriptor Table) pour le long mode. La GDT est nécessaire même en long mode, mais elle est très simple (un seul segment couvrant tout l'espace mémoire)
 	jmp gdt64.code:_start64				; saute à _start64 en utilisant le segment de code défini dans la GDT (bits 43, 44, 47, 53 = code segment 64-bit)
 
-; Le mode 64-bit exige la pagination activée. 
+; Le mode 64-bit exige la pagination activée.
 ; On crée un mapping simple (identity map) : l'adresse virtuelle = l'adresse physique.
 ; 3 niveaux de tables : P4 → P3 → P2
 setup_page_tables:
@@ -108,7 +108,7 @@ setup_page_tables:
 	mul ecx								; eax = adresse physique de la page à mapper
 	or eax, 0b10000011					; ajoute le bit 7 = huge page (pages de 2 Mo au lieu de 4 Ko — plus simple pour démarrer)
 	mov [p2_table + ecx * 8], eax		; la table P2 pointe vers la page physique
-	inc ecx								; passe à la page suivante					
+	inc ecx								; passe à la page suivante
 	cmp ecx, 2048						; 2048 × 2 Mo = 4 Go de RAM
 	jne .loop							; tant que ce n'est pas fini, continue la boucle
 	ret									; retourne à _start32 pour continuer le processus de démarrage en long mode
@@ -133,7 +133,7 @@ section .text							; le code 64-bit doit être dans une section .text séparée
 bits 64									; indique que le code qui suit est du code 64-bit, ce qui permet d'utiliser les registres 64-bit (rax, rbx, etc.) et les instructions du long mode
 
 _start64:								; point d'entrée en long mode
-	mov ax, 0							; segment nul pour les segments de données (on n'utilise pas de segmentation en long mode, mais il faut quand même initialiser les registres de segment)	
+	mov ax, 0							; segment nul pour les segments de données (on n'utilise pas de segmentation en long mode, mais il faut quand même initialiser les registres de segment)
 	mov ss, ax							; segment nul pour la pile
 	mov ds, ax							; segment nul pour les données
 	mov es, ax							; segment nul pour les données
