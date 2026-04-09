@@ -17,6 +17,8 @@ static mut BACK_BUF:        [u32; 2_073_600] = [0; 2_073_600];
 
 /// Couleur du texte par défaut
 const FG:                   u32 = 0xFFFFFF; // blanc
+const TEXT_MAX_COLS:        usize = 100;
+const TEXT_MAX_ROWS:        usize = 50;
 
 /// Writer framebuffer - gère un curseur texte et dessine avec la police bitmap.
 pub struct FbWriter {
@@ -26,7 +28,7 @@ pub struct FbWriter {
     pub y_origin: u32,                      // pixel Y du coin haut-gauche de la zone d'écriture
     pub max_cols: u32,                      // nombre max de colonnes
     pub max_rows: u32,                      // nombre max de lignes
-    pub text_buf: [[u8; 64]; 20],           // buffer texte max 64 cols x 20 lignes
+    pub text_buf: [[u8; TEXT_MAX_COLS]; TEXT_MAX_ROWS],          // buffer texte max 100 cols x 50 lignes
     pub bg: u32,                            // couleur de fond de la zone d'écriture
     pub bound_win: usize,                   // index fenetre liée (usize::MAX = aucune)
 }
@@ -233,15 +235,15 @@ impl FbWriter {
         fill_rect(self.x_origin, self.y_origin, self.max_cols * 8, self.max_rows * 16, self.bg);
         self.row = 0;
         self.col = 0;
-        self.text_buf = [[b' '; 64]; 20];
+        self.text_buf = [[b' '; TEXT_MAX_COLS]; TEXT_MAX_ROWS];
     }
 
     /// Redessine tout le texte depuis le buffer (après un drag de fenêtre)
     pub fn redraw_text(&self) {
         let mut r: u32 = 0;
-        while r < self.max_rows.min(20) {
+        while r < self.max_rows.min(TEXT_MAX_ROWS as u32) {
             let mut c: u32 = 0;
-            while c < self.max_cols.min(64) {
+            while c < self.max_cols.min(TEXT_MAX_COLS as u32) {
                 let ch = self.text_buf[r as usize][c as usize];
                 let x = self.x_origin + c * 8;
                 let y = self.y_origin + r * 16;
@@ -267,7 +269,7 @@ pub static mut FB_WRITER: FbWriter = FbWriter {
     row: 0, col: 0,
     x_origin: 0, y_origin: 0,
     max_cols: 0, max_rows: 0,
-    text_buf: [[b' '; 64]; 20],
+    text_buf: [[b' '; TEXT_MAX_COLS]; TEXT_MAX_ROWS],
     bg: crate::ui::theme::DESKTOP_BG,
     bound_win: usize::MAX,
 };
@@ -283,8 +285,23 @@ pub fn bind_writer_to_window(x: u32, y: u32, w: u32, h: u32, win_idx: usize) {
         writer.row = 0;
         writer.col = 0;
         writer.bg = crate::ui::theme::WIN_CONTENT;
-        writer.text_buf = [[b' '; 64]; 20];
+        writer.text_buf = [[b' '; TEXT_MAX_COLS]; TEXT_MAX_ROWS];
         writer.bound_win = win_idx;
     }
 }
 
+/// Bind automatique : lit la taille de la fenetre et calcule la sone de contenue
+pub fn bind_writer_to_win(win_idx: usize) {
+    unsafe {
+        let win = &(*addr_of!(crate::ui::window::WINDOWS))[win_idx];
+        let border: u32 = 1;
+        let title_h: u32 = 20;
+        bind_writer_to_window(
+            win.x + border,
+            win.y + border + title_h,
+            win.w - 2 * border,
+            win.h - 2 * border - title_h,
+            win_idx,
+        );
+    }
+}

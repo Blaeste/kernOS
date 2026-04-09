@@ -72,7 +72,8 @@ fn execute(cmd: &[u8]) {
             "  ataWrite - ecrit dans le secteur 0\n",
             "  kfsLs    - liste fichiers disque\n",
             "  kfsWrite - ecrit sur disque (kfsWrite nom contenu)\n",
-            "  kfsRead  - lit depuis disque (kfsRead nom)",
+            "  kfsRead  - lit depuis disque (kfsRead nom)\n",
+            "  kfsDel  - supprime un fichier disque (kfsDel nom)",
         ));
     } else if eq(cmd, b"clear") {
         unsafe {
@@ -175,9 +176,14 @@ fn execute(cmd: &[u8]) {
         crate::drivers::ata::write_sector(0, &buf);
         crate::println!("Secteur 0 ecrit OK");
     } else if eq(cmd, b"kfsLs") {
+        let mut count = 0u32;
         crate::fs::kfs::list(|name, size| {
             crate::println!("   {} ({} o)", to_str(name), size);
+            count += 1;
         });
+        if count == 0 {
+            crate::println!("(vide)");
+        }
     } else if starts_with(cmd, b"kfsWrite") {
         let rest = &cmd[9..];
         if let Some(pos) = find_space(rest) {
@@ -194,6 +200,13 @@ fn execute(cmd: &[u8]) {
             crate::println!("fichier introuvable");
         } else {
             crate::println!("{}", to_str_or(&buf[..sz], "(binaire)"));
+        }
+    } else if starts_with(cmd, b"kfsDel") {
+        let name = &cmd[7..];
+        if crate::fs::kfs::delete(name) {
+            crate::println!("OK");
+        } else {
+            crate::println!("fichier introuvable");
         }
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire

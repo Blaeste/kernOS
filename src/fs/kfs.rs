@@ -31,6 +31,21 @@ pub struct FileEntry {
 
 use crate::drivers::ata::{read_sector, write_sector};
 
+/// Helper : Retoune la longueur du nom (jusqu'au premier 0)
+fn name_len(name: &[u8]) -> usize {
+    let mut l = 0;
+    while l < NAME_MAX && name[l] != 0 { l += 1; }
+    l
+}
+
+/// Helper : Compare deux noms (jusqu'à la première différence ou fin)
+fn name_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() { return false; }
+    let mut i = 0;
+    while i < a.len() { if a[i] != b[i] { return false; }  i += 1; }
+    true
+}
+
 /// Lit le superbloc depuis le secteur 0
 fn read_superblock() -> SuperBlock {
     let mut buf = [0u16; 256];
@@ -129,11 +144,7 @@ pub fn list(mut cb: impl FnMut(&[u8], u32)) {
     while i < MAX_FILES {
         let entry = read_entry(i);
         if entry.used == 1 {
-            let len = {
-                let mut l = 0;
-                while l < NAME_MAX && entry.name[l] != 0 { l += 1; }
-                l
-            };
+            let len = name_len(&entry.name);
             cb(&entry.name[..len], entry.size);
         }
         i += 1;
@@ -146,29 +157,46 @@ pub fn read(name: &[u8], out: &mut [u8; 512]) -> usize {
     while i < MAX_FILES {
         let entry = read_entry(i);
         if entry.used == 1 {
-            let len = {
-                let mut l = 0;
-                while l < NAME_MAX && entry.name[l] != 0 { l += 1; }
-                l
-            };
-            if len == name.len() {
-                let mut eq = true;
-                let mut j = 0;
-                while j < len { if entry.name[j] != name[j] { eq = false; } j += 1; }
-                if eq {
-                    let mut buf = [0u16; 256];
-                    read_sector(entry.data_lba, &mut buf);
-                    let bytes = unsafe {
-                        core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512)
-                    };
-                    let sz = entry.size as usize;
-                    let mut k = 0;
-                    while k < sz && k < 512 { out[k] = bytes[k]; k += 1; }
-                    return sz;
-                }
+            let len = name_len(&entry.name);
+            if name_eq(&entry.name[..len], name) {
+                let mut buf = [0u16; 256];
+                read_sector(entry.data_lba, &mut buf);
+                let bytes = unsafe {
+                    core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512)
+                };
+                let sz = entry.size as usize;
+                let mut k = 0;
+                while k < sz && k < 512 { out[k] = bytes[k]; k += 1; }
+                return sz;
             }
         }
         i += 1;
     }
     0
+}
+
+/// Supprime un fichier du disque
+/// Retoune true si trouve et supprime, false si introuvable
+pub fn delete(name: &[u8]) -> bool {
+    let mut i = 0;
+    while i < MAX_FILES {
+        let entry = read_entry(i);
+        if entry.used == 1 {
+            let len = name_len(&entry.name);
+            if name_eq(&entry.name[..len], name) {
+                // Ecrase le slot avec une entree vide
+                let empty = FileEntry {
+                    used: 0,
+                    name: [0; NAME_MAX],
+                    size: 0,
+                    data_lba: 0,
+                    _pad: [0; 475],
+                };
+                write_entry(i, &empty);
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
 }

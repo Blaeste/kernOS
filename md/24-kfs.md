@@ -37,6 +37,12 @@ Secteurs 9-16   → Données (1 fichier = 1 secteur = 512 octets max)
 - `create(name, data)` — trouve un slot libre, écrit l'entrée + les données
 - `list(cb)` — itère les entrées utilisées, appelle le callback avec (name, size)
 - `read(name, out)` — cherche par nom, lit les données dans `out`, retourne la taille
+- `delete(name)` — cherche par nom, écrase le slot avec une entrée vide
+
+## Helpers
+
+- `name_len(name)` — longueur du nom jusqu'au premier `\0`
+- `name_eq(a, b)` — compare deux slices octet par octet
 
 ## Commandes shell
 
@@ -45,17 +51,18 @@ Secteurs 9-16   → Données (1 fichier = 1 secteur = 512 octets max)
 | `kfsLs`                      | Liste les fichiers sur disque       |
 | `kfsWrite <nom> <contenu>`   | Crée un fichier sur disque          |
 | `kfsRead <nom>`              | Lit et affiche un fichier disque    |
+| `kfsDel <nom>`               | Supprime un fichier disque          |
 
 ## Limites actuelles
 
 - Max 8 fichiers
 - Max 512 octets par fichier (1 secteur)
-- Pas de suppression (`kfsDel` à ajouter)
 - Pas de sous-dossiers
 
 ## Fichiers modifiés
 
-- `src/fs/kfs.rs` — nouveau, tout le filesystem
+- `src/fs/kfs.rs` — nouveau, tout le filesystem + helpers `name_len`, `name_eq`
 - `src/fs/mod.rs` — `pub mod kfs`
-- `src/shell.rs` — commandes kfsLs, kfsWrite, kfsRead + help mis à jour (concat!)
-- `src/main.rs` — `fs::kfs::init()` au boot
+- `src/shell.rs` — commandes kfsLs, kfsWrite, kfsRead, kfsDel + help (concat!)
+- `src/main.rs` — `fs::kfs::init()` au boot + `bind_writer_to_win` auto
+- `src/io/framebuffer.rs` — `bind_writer_to_win`, `TEXT_MAX_COLS/ROWS` constantes, text_buf agrandi

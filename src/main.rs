@@ -160,22 +160,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     let term_idx = ui::window::create_window(10, 10, 400, 800, "Terminal");
     ui::window::set_focused_win(term_idx);
     // Lie le writer à la zone de contenue de la fenêtre Terminal
-    {
-        let border: u32 = 1;
-        let title_h: u32 = 20;
-        let wx: u32 = 100;
-        let wy: u32 = 80;
-        let ww: u32 = 400;
-        let wh: u32 = 300;
-        io::framebuffer::bind_writer_to_window(
-            wx + border,
-            wy + border + title_h,
-            ww - 2 * border,
-            wh - 2 * border - title_h,
-            term_idx,
-        );
-    }
-
+    io::framebuffer::bind_writer_to_win(term_idx);
 
     ui::window::create_window(420, 10, 400, 800, "Fichiers");
     ui::window::draw_all();
