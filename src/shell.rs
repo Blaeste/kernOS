@@ -67,6 +67,8 @@ fn execute(cmd: &[u8]) {
         crate::println!("  cqt    - affiche un fichier (cat nom)");
         crate::println!("  write  - cree un fichier (write nom contenu)");
         crate::println!("  rm     - supprime un fichier (rm nom)");
+        crate::println!("  ataRead  - lit le secteur 0");
+        crate::println!("  ataWrite - ecrit dans le secteur 0");
     } else if eq(cmd, b"clear") {
         unsafe {
             if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
@@ -149,6 +151,24 @@ fn execute(cmd: &[u8]) {
         }
     } else if starts_with(cmd, b"rm") {
         crate::fs::ramfs::rm(&cmd[3..]);
+    } else if eq(cmd, b"ataRead") {
+        let mut buf = [0u16; 256];
+        crate::drivers::ata::read_sector(0, &mut buf);
+        crate::println!("Secteur 0 (16 premier octets):");
+        let mut i = 0;
+        while i < 8 {
+            let word = buf[i];
+            crate::println!("  [{:02}] {:02x} {:02x}", i*2, word & 0xFF, (word >> 8) & 0xFF);
+            i += 1;
+        }
+    } else if eq(cmd, b"ataWrite") {
+        let mut buf = [0u16; 256];
+        // Ecrit "KernOS" dans les premiers octets
+        buf[0] = 0x654B;
+        buf[1] = 0x6E72;
+        buf[2] = 0x534F;
+        crate::drivers::ata::write_sector(0, &buf);
+        crate::println!("Secteur 0 ecrit OK");
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {
