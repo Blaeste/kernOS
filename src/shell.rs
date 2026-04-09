@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use crate::klib::string::{eq, to_str, starts_with, find_space};
+use crate::klib::string::{eq, to_str, to_str_or, starts_with, find_space};
 
 const MAX_CMD: usize = 78;  // 80 colonnes - 2 pour "> "
 
@@ -169,6 +169,27 @@ fn execute(cmd: &[u8]) {
         buf[2] = 0x534F;
         crate::drivers::ata::write_sector(0, &buf);
         crate::println!("Secteur 0 ecrit OK");
+    } else if eq(cmd, b"kfsLs") {
+        crate::fs::kfs::list(|name, size| {
+            crate::println!("   {} ({} o)", to_str(name), size);
+        });
+    } else if starts_with(cmd, b"kfsWrite") {
+        let rest = &cmd[9..];
+        if let Some(pos) = find_space(rest) {
+            let ok = crate::fs::kfs::create(&rest[..pos], &rest[pos+1..]);
+            if ok { crate::println!("OK"); } else { crate::println!("Erreur (plein?)"); }
+        } else {
+            crate::println!("usage kfsWrite <nom> <contenu>");
+        }
+    } else if starts_with(cmd, b"kfsRead") {
+        let name = &cmd[8..];
+        let mut buf = [0u8; 512];
+        let sz = crate::fs::kfs::read(name, &mut buf);
+        if sz == 0 {
+            crate::println!("fichier introuvable");
+        } else {
+            crate::println!("{}", to_str_or(&buf[..sz], "(binaire)"));
+        }
     } else if cmd.is_empty() {
         // Entrer sans rien faire -> ne rien faire
     } else {

@@ -134,6 +134,7 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
         unsafe { (*addr_of_mut!(io::vga::WRITER)).color = 0x0B; }    // couleur : cyan clair sur noir
     }
 
+    fs::kfs::init();
     interrupt::init();  // charge l'IDT
     drivers::pic::init();        // remapping + init PIC
     drivers::timer::init(100);   // 100 Hz = 10ms par tick
