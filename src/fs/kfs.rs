@@ -1,5 +1,10 @@
 /// KernOS File System - filesystem persiste sur disque ATA
 
+use crate::drivers::ata::{read_sector, write_sector};
+use crate::klib::string::{eq, strlen};
+use crate::klib::mem::memcpy;
+use crate::klib::cmp::min;
+
 // Layout disque :
 // Secteur 0     = superbloc
 // Secteurs 1-8  = table des fichiers (1 entrée par secteur)
@@ -27,23 +32,6 @@ pub struct FileEntry {
     pub size:       u32,
     pub data_lba:   u32,                    // secteur où sont les données
     pub _pad:       [u8; 475],              // remplit 512 octets
-}
-
-use crate::drivers::ata::{read_sector, write_sector};
-
-/// Helper : Retoune la longueur du nom (jusqu'au premier 0)
-fn name_len(name: &[u8]) -> usize {
-    let mut l = 0;
-    while l < NAME_MAX && name[l] != 0 { l += 1; }
-    l
-}
-
-/// Helper : Compare deux noms (jusqu'à la première différence ou fin)
-fn name_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
-    let mut i = 0;
-    while i < a.len() { if a[i] != b[i] { return false; }  i += 1; }
-    true
 }
 
 /// Lit le superbloc depuis le secteur 0
@@ -118,18 +106,16 @@ pub fn create(name: &[u8], data: &[u8]) -> bool {
                 _pad: [0; 475],
             };
             // Copie le nom
-            let len = if name.len() < NAME_MAX { name.len() } else { NAME_MAX };
-            let mut j = 0;
-            while j < len { new_entry.name[j] = name[j]; j += 1; }
+            let len = min(name.len(), NAME_MAX);
+            memcpy(&mut new_entry.name, name, len);
             write_entry(i, &new_entry);
             // Ecrit les données
             let mut buf = [0u16; 256];
             let bytes = unsafe {
                 core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 512)
             };
-            let dlen = if data.len() < 512 { data.len() } else { 512 };
-            let mut k = 0;
-            while k < dlen { bytes[k] = data[k]; k += 1; }
+            let dlen = min(data.len(), 512);
+            memcpy(bytes, data, dlen);
             write_sector(DATA_START_LBA + i as u32, &buf);
             return true;
         }
@@ -144,7 +130,7 @@ pub fn list(mut cb: impl FnMut(&[u8], u32)) {
     while i < MAX_FILES {
         let entry = read_entry(i);
         if entry.used == 1 {
-            let len = name_len(&entry.name);
+            let len = strlen(&entry.name);
             cb(&entry.name[..len], entry.size);
         }
         i += 1;
@@ -157,16 +143,16 @@ pub fn read(name: &[u8], out: &mut [u8; 512]) -> usize {
     while i < MAX_FILES {
         let entry = read_entry(i);
         if entry.used == 1 {
-            let len = name_len(&entry.name);
-            if name_eq(&entry.name[..len], name) {
+            let len = strlen(&entry.name);
+            if eq(&entry.name[..len], name) {
                 let mut buf = [0u16; 256];
                 read_sector(entry.data_lba, &mut buf);
                 let bytes = unsafe {
                     core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512)
                 };
                 let sz = entry.size as usize;
-                let mut k = 0;
-                while k < sz && k < 512 { out[k] = bytes[k]; k += 1; }
+                let copy_len = min(sz, 512);
+                memcpy(out, bytes, copy_len);
                 return sz;
             }
         }
@@ -182,8 +168,8 @@ pub fn delete(name: &[u8]) -> bool {
     while i < MAX_FILES {
         let entry = read_entry(i);
         if entry.used == 1 {
-            let len = name_len(&entry.name);
-            if name_eq(&entry.name[..len], name) {
+            let len = strlen(&entry.name);
+            if eq(&entry.name[..len], name) {
                 // Ecrase le slot avec une entree vide
                 let empty = FileEntry {
                     used: 0,

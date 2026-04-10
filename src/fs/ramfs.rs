@@ -1,6 +1,8 @@
 /// Système de fichiers en RAM (RAMfs)
 
-use crate::klib::string::{eq, to_str, to_str_or};
+use crate::klib::string::{eq, to_str, to_str_or, strlen};
+use crate::klib::cmp::min;
+use crate::klib::mem::memcpy;
 
 /// Nom max d'un fichier (31 chars + null)
 const NAME_MAX: usize = 32;
@@ -53,21 +55,17 @@ pub fn create(name: &[u8], data: &[u8]) -> bool {
         let f = &mut files_mut()[i];
         if !f.used {
             // Copie le nom
-            for j in 0..name.len() {
-                f.name[j] = name[j];
-            }
+            memcpy(&mut f.name, name, name.len());
             f.name[name.len()] = 0;
 
             // Copie les données (max DATA_MAX octets)
-            let len = if data.len() > DATA_MAX { DATA_MAX } else { data.len() };
-            for j in 0..len {
-                f.data[j] = data[j];
-            }
+            let len = min(data.len(), DATA_MAX);
+            memcpy(&mut f.data, data, len);
             f.size = len;
             f.used = true;
             return true;
         }
-    } 
+    }
     false
 }
 
@@ -77,7 +75,7 @@ pub fn ls() {
     for i in 0..MAX_FILES {
         let f = &files()[i];
         if f.used {
-            let name = to_str(&f.name[..name_len(&f.name)]);
+            let name = to_str(&f.name[..strlen(&f.name)]);
             crate::println!(" {} ({} octets)", name, f.size);
             count += 1;
         }
@@ -85,15 +83,6 @@ pub fn ls() {
     if count == 0 {
         crate::println!(" (vide)");
     }
-}
-
-/// Retourne la longeur d'un nom (jusqu'au null terminator)
-fn name_len(name: &[u8]) -> usize {
-    let mut i = 0;
-    while i < name.len() && name[i] != 0 {
-        i += 1;
-    }
-    i
 }
 
 /// Affiche le contenu d'un fichier par son nom
@@ -127,7 +116,7 @@ pub fn list(mut cb: impl FnMut(&[u8], usize)) {
     for i in 0..MAX_FILES {
         let f = &files()[i];
         if f.used {
-            cb(&f.name[..name_len(&f.name)], f.size);
+            cb(&f.name[..strlen(&f.name)], f.size);
         }
     }
 }

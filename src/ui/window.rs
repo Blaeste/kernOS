@@ -25,6 +25,8 @@ use crate::io::framebuffer::{fill_rect, draw_string};
 use core::ptr::{addr_of, addr_of_mut};
 
 use crate::ui::theme::*;
+use crate::klib::cmp::min;
+use crate::klib::mem::memcpy;
 
 /// Fenêtre
 const BORDER:       u32 = 1;            // épaisseur bordure
@@ -85,12 +87,8 @@ pub fn create_window(x: u32, y: u32, w: u32, h: u32, title: &str) -> usize {
 
         // Copie le titre octet par octet
         let bytes = title.as_bytes();
-        let len = if bytes.len() < MAX_TITLE { bytes.len() } else { MAX_TITLE };
-        let mut i = 0;
-        while i < len {
-            WINDOWS[idx].title[i] = bytes[i];
-            i += 1;
-        }
+        let len = min(bytes.len(), MAX_TITLE);
+        memcpy(&mut WINDOWS[idx].title, bytes, len);
         WINDOWS[idx].title_len = len;
 
         Z_ORDER[WINDOW_COUNT] = WINDOW_COUNT;

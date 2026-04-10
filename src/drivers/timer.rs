@@ -31,7 +31,9 @@ pub fn tick() {
         if *ptr % 100 == 0 {
             if *core::ptr::addr_of!(crate::io::framebuffer::FB_ACTIVE) {
                 crate::ui::taskbar::draw();
-                crate::io::framebuffer::swap_buffers();
+                if !crate::ui::window::is_dragging() {
+                    crate::io::framebuffer::swap_buffers();
+                }
             }
         }
     }

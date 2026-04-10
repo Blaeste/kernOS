@@ -14,7 +14,7 @@
 */
 
 use crate::io::framebuffer::{fill_rect, draw_string};
-use crate::klib::string::{to_str, to_str_or};
+use crate::klib::string::{to_str, to_str_or, pad2};
 use core::ptr::addr_of;
 
 use crate::ui::theme::*;
@@ -55,11 +55,9 @@ pub fn draw() {
 
         // Convertir en string "MM::SS"
         let mut buf = [0u8; 8];
-        buf[0] = b'0' + (mins / 10) as u8;
-        buf[1] = b'0' + (mins % 10) as u8;
+        pad2(mins as u32, &mut buf[0..2]);
         buf[2] = b':';
-        buf[3] = b'0' + (s / 10) as u8;
-        buf[4] = b'0' + (s % 10) as u8;
+        pad2(s as u32, &mut buf[3..5]);
         let time_str = to_str_or(&buf[..5], "00:00");
 
         let clock_w: u32 = 5 * 8 + 8; // 5 chars * 8px + padding;

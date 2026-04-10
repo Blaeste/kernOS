@@ -77,6 +77,8 @@ pub fn put_pixel_direct(x: u32, y: u32, color: u32) {
 pub fn get_pixel(x: u32, y: u32) -> u32 {
     unsafe {
         let w = *addr_of!(FB_WIDTH);
+        let h = *addr_of!(FB_HEIGHT);
+        if x >= w || y >= h { return 0; }
         BACK_BUF[(y * w + x) as usize]
     }
 }

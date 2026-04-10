@@ -36,3 +36,47 @@ pub fn find_space(s: &[u8]) -> Option<usize> {
     }
     None
 }
+
+/// Retourne la longueur d'un slice jusqu'au premier octet \0
+pub fn strlen(s: &[u8]) -> usize {
+    let mut l = 0;
+    while l < s.len() && s[l] != 0 { l += 1; }
+    l
+}
+
+/// Convertit un entier en décimal ASCII dans buf (écrit de droite à gauche).
+/// Retourne le slice du résultat dans buf.
+/// Ex: itoa(42, &mut buf) → &[b'4', b'2']
+pub fn itoa(mut n: u32, buf: &mut [u8]) -> &[u8] {
+    if buf.is_empty() { return &[]; }
+    if n == 0 {
+        buf[buf.len() - 1] = b'0';
+        return &buf[buf.len() - 1..];
+    }
+    let mut i = buf.len();
+    while n > 0 && i > 0 {
+        i -= 1;
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+    &buf[i..]
+}
+
+/// Convertit un ASCII en entier.
+pub fn atoi(s: &[u8]) -> u32 {
+    let mut n: u32 = 0;
+    let mut i = 0;
+    while i< s.len() && s[i] >= b'0' && s[i] <= b'9' {
+        n = n * 10 + (s[i] - b'0') as u32;
+        i += 1;
+    }
+    n
+}
+
+/// Écrit un nombre 0-99 sur 2 chiffres dans buf[0..2] (avec zéro padding).
+/// Ex: pad2(5, &mut buf) → buf = [b'0', b'5']
+pub fn pad2(n: u32, buf: &mut [u8]) {
+    buf[0] = b'0' + ((n / 10) % 10) as u8;
+    buf[1] = b'0' + (n % 10) as u8;
+}
+
