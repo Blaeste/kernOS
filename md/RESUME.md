@@ -40,7 +40,7 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 8. ~~**Pagination**~~ ✅ — Page tables 4 niveaux, map/unmap/translate
 9. ~~**Multitâche**~~ ✅ — Scheduler round-robin, context switch, spawn
 10. **Système de fichiers** — Lire/écrire sur disque
-11. ~~**Stack graphique**~~ ✅ — Framebuffer 800×600, police bitmap, FbWriter, double buffering, curseur souris, fenêtres, drag & drop
+11. ~~**Stack graphique**~~ ✅ — Framebuffer 800×600, police bitmap, FbWriter, double buffering, curseur souris, fenêtres, drag & drop, dirty rectangles
 
 ## Architecture du Code
 

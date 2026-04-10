@@ -15,6 +15,12 @@ pub static mut FB_ACTIVE:   bool = false;   // true si le framebuffer est actif
 /// Back buffer pour le double buffering (max 1920×1080)
 static mut BACK_BUF:        [u32; 2_073_600] = [0; 2_073_600];
 
+/// Dirty rect
+static mut DIRTY_X1:    u32 = 0;    // coin haut gauche X
+static mut DIRTY_Y1:    u32 = 0;    // coin haut droit Y
+static mut DIRTY_X2:    u32 = 0;    // coin bas gauche X
+static mut DIRTY_Y2:    u32 = 0;    // coin bas droit Y
+
 /// Couleur du texte par défaut
 const FG:                   u32 = 0xFFFFFF; // blanc
 const TEXT_MAX_COLS:        usize = 100;
@@ -47,6 +53,22 @@ pub fn init(fb: &crate::multiboot::FramebufferTag) {
         (*addr_of_mut!(FB_WRITER)).y_origin = 0;
         (*addr_of_mut!(FB_WRITER)).max_cols = fb.width / 8;
         (*addr_of_mut!(FB_WRITER)).max_rows = fb.height / 16;
+    }
+}
+
+/// Marque la zone sale a redraw
+pub fn mark_dirty(x: u32, y: u32, w: u32, h: u32) {
+    unsafe {
+        // Agrendit le dirty rect poru englober la nouvelle zone
+        if DIRTY_X2 == 0 && DIRTY_Y2 == 0 {
+            DIRTY_X1 = x; DIRTY_Y1 = y;
+            DIRTY_X2 = x + w; DIRTY_Y2 = y + h;
+        } else {
+            if x < DIRTY_X1 { DIRTY_X1 = x; }
+            if y < DIRTY_Y1 { DIRTY_Y1 = y; }
+            if x + w > DIRTY_X2 { DIRTY_X2 = x + w; }
+            if y + h > DIRTY_Y2 { DIRTY_Y2 = y + h; }
+        }
     }
 }
 
@@ -86,23 +108,37 @@ pub fn get_pixel(x: u32, y: u32) -> u32 {
 /// Copie le back buffer vers le framebuffer réel (affiche tout d'un coup)
 pub fn swap_buffers() {
     unsafe {
+        // Rien de modifie -> on copie rien
+        if DIRTY_X2 == 0 && DIRTY_Y2 == 0 { return; }
+
         let addr = *addr_of!(FB_ADDR) as *mut u32;
         let w = *addr_of!(FB_WIDTH) as usize;
-        let h = *addr_of!(FB_HEIGHT) as usize;
         let pitch = *addr_of!(FB_PITCH) as usize;
-        let mut y = 0;
-        while y < h {
-            let src = addr_of!(BACK_BUF).cast::<u32>().add(y * w);
-            let dst = addr.add(y * pitch / 4);
-            core::ptr::copy_nonoverlapping(src, dst, w);
+
+        let x1 = DIRTY_X1 as usize;
+        let y1 = DIRTY_Y1 as usize;
+        let x2 = DIRTY_X2 as usize;
+        let y2 = DIRTY_Y2 as usize;
+        let copy_w = x2 - x1;
+
+        let mut y = y1;
+        while y < y2 {
+            let src = addr_of!(BACK_BUF).cast::<u32>().add(y * w + x1);
+            let dst = addr.add(y * pitch / 4 + x1);
+            core::ptr::copy_nonoverlapping(src, dst, copy_w);
             y += 1;
         }
+
+        // Reset dirty rect
+        DIRTY_X1 = 0; DIRTY_Y1 = 0;
+        DIRTY_X2 = 0; DIRTY_Y2 = 0;
     }
 }
 
 /// Dessine un rectangle rempli.
 /// (x, y) = coin haut-gauche, w = largeur, h = hauteur
 pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
+    mark_dirty(x, y, w, h);
     let mut dy = 0;
     while dy < h {
         let mut dx = 0;
@@ -119,6 +155,7 @@ pub fn clear(color: u32) {
     unsafe {
         let w = *addr_of!(FB_WIDTH) as usize;
         let h = *addr_of!(FB_HEIGHT) as usize;
+        mark_dirty(0, 0, w as u32, h as u32);
         let mut i = 0;
         while i < w * h {
             BACK_BUF[i] = color;
@@ -130,6 +167,7 @@ pub fn clear(color: u32) {
 /// Dessine un caractère à la position (x, y) avec la police bitmap 8x16.
 /// fg = couleur du text, ng = couleur du fond.
 pub fn draw_char(x: u32, y: u32, c: u8, fg: u32, bg: u32) {
+    mark_dirty(x, y, 8, 16);
     let glyph = crate::io::font::FONT[c as usize];      // recupère les 16 lignes du caractère
 
     let mut row = 0;
@@ -202,6 +240,7 @@ impl FbWriter {
             let y0 = self.y_origin as usize;
             let zone_w = self.max_cols as usize * 8;
             let zone_h = self.max_rows as usize * 16;
+            mark_dirty(self.x_origin, self.y_origin, zone_w as u32, zone_h as u32);
 
             // Copie chaque ligne de pxiels une ligne de texte (16px) vers le haut
             let mut y: usize = y0 + 16;

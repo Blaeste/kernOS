@@ -187,9 +187,9 @@ pub fn swap_buffers() {
 }
 ```
 
-### Double buffering sélectif
+### Double buffering sélectif (dirty rectangles)
 
-`swap_buffers()` copie tout l'écran → coûteux. On ne l'appelle que quand nécessaire (pendant le drag). Pour le curseur seul, on utilise `put_pixel_direct` qui écrit directement au framebuffer sans passer par le back buffer → rapide, pas de swap nécessaire.
+`swap_buffers()` ne copie plus tout l'écran — elle utilise un **dirty rectangle** qui traque la zone modifiée depuis le dernier swap. Seule cette zone est copiée via `copy_nonoverlapping`. Si rien n'a changé, `swap_buffers()` retourne immédiatement. Voir [26-dirty-rect.md](26-dirty-rect.md) pour les détails.
 
 ### Flux
 

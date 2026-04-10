@@ -218,6 +218,7 @@ pub fn on_irq(byte: u8) {
             if !redrawn {
                 let ox = *addr_of!(OLD_MOUSE_X) as u32;
                 let oy = *addr_of!(OLD_MOUSE_Y) as u32;
+                crate::io::framebuffer::mark_dirty(ox, oy, CURSOR_W, CURSOR_H);
                 let mut i = 0;
 
                 while i < CURSOR_H {
@@ -230,7 +231,7 @@ pub fn on_irq(byte: u8) {
                     i += 1;
                 }
             }
-            
+
             // Sauvegarde les pixels sous le nouveau curseur
             let nx = *addr_of!(MOUSE_X) as u32;
             let ny = *addr_of!(MOUSE_Y) as u32;
@@ -243,6 +244,8 @@ pub fn on_irq(byte: u8) {
                 }
                 i += 1;
             }
+
+            crate::io::framebuffer::mark_dirty(nx, ny, CURSOR_W, CURSOR_H);
 
             // Dessine le curseur flèche
             i = 0;
