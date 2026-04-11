@@ -1,3 +1,5 @@
+use core::ptr::{addr_of, addr_of_mut};
+
 // Table scancode Set 1 -> Caractère ASCII (index = scancode)
 // 0 = pas de caractère (touche spéciales)
 static QWERTY_NORMAL: [u8; 58] = [
@@ -86,8 +88,37 @@ pub enum Layout { Qwerty, Azerty }
 pub static mut LAYOUT: Layout = Layout::Qwerty;
 
 static mut SHIFT_HELD: bool = false;
+static mut E0_PENDING: bool = false;
 
 pub fn on_key(scancode: u8) {
+    //
+    if scancode == 0xE0 {
+        unsafe { E0_PENDING = true; }
+        return;
+    }
+
+    if unsafe { E0_PENDING } {
+        unsafe { E0_PENDING = false; }
+        match scancode {
+            0x49 => { // pgUp
+                unsafe {
+                    let w = &mut *addr_of_mut!(crate::io::framebuffer::FB_WRITER);
+                    let focused = crate::ui::window::get_focused_win();
+                    if focused == w.bound_win { w.scroll_up(); }
+                }
+            }
+            0x51 => { // PgDn
+                unsafe {
+                    let w = &mut *addr_of_mut!(crate::io::framebuffer::FB_WRITER);
+                    let focused = crate::ui::window::get_focused_win();
+                    if focused == w.bound_win { w.scroll_down(); }
+                }
+            }
+            _ => {}
+        }
+        return;
+    }   
+
     // Shift appuyé (0x2A=gauche, 0x36=droite)
     if scancode == 0x2A || scancode == 0x36 {
         unsafe { SHIFT_HELD = true; }
@@ -119,7 +150,7 @@ pub fn on_key(scancode: u8) {
         }
 
         let focused = crate::ui::window::get_focused_win();
-        let bound = unsafe { (*core::ptr::addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win };
+        let bound = unsafe { (*addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win };
         if focused == bound {
             crate::shell::on_char(ch);
         }

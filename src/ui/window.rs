@@ -323,7 +323,7 @@ pub fn redraw_writer_if_visible() {
         writer.y_origin = win.y + BORDER + TITLE_H;
         writer.max_cols = (win.w - 2 * BORDER) / 8;
         writer.max_rows = (win.h - 2 * BORDER - TITLE_H) / 16;
-        writer.redraw_text();
+        writer.redraw_from_buf();
     }
 }
 

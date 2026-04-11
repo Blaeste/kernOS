@@ -24,19 +24,20 @@ static mut DIRTY_Y2:    u32 = 0;    // coin bas droit Y
 /// Couleur du texte par défaut
 const FG:                   u32 = 0xFFFFFF; // blanc
 const TEXT_MAX_COLS:        usize = 100;
-const TEXT_MAX_ROWS:        usize = 50;
+const TEXT_MAX_ROWS:        usize = 200;
 
 /// Writer framebuffer - gère un curseur texte et dessine avec la police bitmap.
 pub struct FbWriter {
-    pub row:      u32,                      // ligne courante (en caractères, aps en pixels)
-    pub col:      u32,                      // colonne courante
-    pub x_origin: u32,                      // pixel X du coin haut-gauche de la zone d'écriture
-    pub y_origin: u32,                      // pixel Y du coin haut-gauche de la zone d'écriture
-    pub max_cols: u32,                      // nombre max de colonnes
-    pub max_rows: u32,                      // nombre max de lignes
-    pub text_buf: [[u8; TEXT_MAX_COLS]; TEXT_MAX_ROWS],          // buffer texte max 100 cols x 50 lignes
-    pub bg: u32,                            // couleur de fond de la zone d'écriture
-    pub bound_win: usize,                   // index fenetre liée (usize::MAX = aucune)
+    pub row:            u32,                                        // ligne courante (en caractères, aps en pixels)
+    pub col:            u32,                                        // colonne courante
+    pub x_origin:       u32,                                        // pixel X du coin haut-gauche de la zone d'écriture
+    pub y_origin:       u32,                                        // pixel Y du coin haut-gauche de la zone d'écriture
+    pub max_cols:       u32,                                        // nombre max de colonnes
+    pub max_rows:       u32,                                        // nombre max de lignes
+    pub text_buf:       [[u8; TEXT_MAX_COLS]; TEXT_MAX_ROWS],       // buffer texte max 100 cols x 50 lignes
+    pub bg:             u32,                                        // couleur de fond de la zone d'écriture
+    pub bound_win:      usize,                                      // index fenetre liée (usize::MAX = aucune)
+    pub view_offset:    u32,                                        // décalage de la zone d'écriture (pour le scroll dans les fenêtres)
 }
 
 /// Initialise le framebuffer avec le sinfos du tag Multiboot2.
@@ -205,6 +206,10 @@ pub fn draw_string(x: u32, y: u32, s: &str, fg: u32, bg: u32) {
 impl FbWriter {
     /// Ecrit un octet (caractère) à la position courante du curseur.
     pub fn write_byte(&mut self, byte: u8) {
+        if self.view_offset > 0 {
+            self.view_offset = 0;
+            self.redraw_from_buf();
+        }
         match byte {
             b'\n' => {
                 self.col = 0;
@@ -217,7 +222,8 @@ impl FbWriter {
                 let x = self.x_origin + self.col * 8;       // position pixel X
                 let y = self.y_origin + self.row * 16;      // position pixel Y
                 draw_char(x, y, byte, FG, self.bg);
-                self.text_buf[self.row as usize][self.col as usize] = byte;
+                let buf_row = (TEXT_MAX_ROWS - self.max_rows as usize) + self.row as usize;
+                self.text_buf[buf_row][self.col as usize] = byte;
                 self.col += 1;
                 if self.col >= self.max_cols {
                     self.col = 0;
@@ -232,7 +238,6 @@ impl FbWriter {
 
     /// Scroll : redessine tout le texte une ligne plsu haut.
     /// On efface simplement l'écran et on remet le curseur à la dernière ligne.
-    /// (Version simple - a améliorer plsu atrd avec un vrai buffer texte)
     pub fn scroll(&mut self) {
         unsafe {
             let sw = *addr_of!(FB_WIDTH) as usize;
@@ -241,6 +246,14 @@ impl FbWriter {
             let zone_w = self.max_cols as usize * 8;
             let zone_h = self.max_rows as usize * 16;
             mark_dirty(self.x_origin, self.y_origin, zone_w as u32, zone_h as u32);
+
+            // Décale text_buf d'une ligne vers le haut
+            let mut i = 0;
+            while i < TEXT_MAX_ROWS - 1 {
+                self.text_buf[i] = self.text_buf[i + 1];
+                i += 1;
+            }
+            self.text_buf[TEXT_MAX_ROWS - 1] = [b' '; TEXT_MAX_COLS];
 
             // Copie chaque ligne de pxiels une ligne de texte (16px) vers le haut
             let mut y: usize = y0 + 16;
@@ -267,7 +280,8 @@ impl FbWriter {
             let x = self.x_origin + self.col * 8;
             let y = self.y_origin + self.row * 16;
             draw_char(x, y, b' ', FG, self.bg);
-            self.text_buf[self.row as usize][self.col as usize] = b' ';
+            let buf_row = (TEXT_MAX_ROWS - self.max_rows as usize) + self.row as usize;
+            self.text_buf[buf_row][self.col as usize] = b' ';
         }
     }
 
@@ -279,19 +293,42 @@ impl FbWriter {
         self.text_buf = [[b' '; TEXT_MAX_COLS]; TEXT_MAX_ROWS];
     }
 
-    /// Redessine tout le texte depuis le buffer (après un drag de fenêtre)
-    pub fn redraw_text(&self) {
+    /// Redessin depusi le buffer text
+    pub fn redraw_from_buf(&self) {
+        let base = (TEXT_MAX_ROWS - self.max_rows as usize).saturating_sub(self.view_offset as usize);
+        fill_rect(self.x_origin, self.y_origin, self.max_cols * 8, self.max_rows * 16, self.bg);
         let mut r: u32 = 0;
-        while r < self.max_rows.min(TEXT_MAX_ROWS as u32) {
+        while r < self.max_rows {
+            let buf_row = base + r as usize;
+            if buf_row >= TEXT_MAX_ROWS { break; }
             let mut c: u32 = 0;
-            while c < self.max_cols.min(TEXT_MAX_COLS as u32) {
-                let ch = self.text_buf[r as usize][c as usize];
+            while c < self.max_cols {
+                let ch = self.text_buf[buf_row][c as usize];
                 let x = self.x_origin + c * 8;
                 let y = self.y_origin + r * 16;
-                draw_char(x, y, ch, FG, self.bg);
+                if ch != 0 && ch != b' ' {
+                    draw_char(x, y, ch, FG, self.bg);
+                }
                 c += 1;
             }
             r += 1;
+        }
+    }
+
+    /// Scroll vers le haut
+    pub fn scroll_up(&mut self) {
+        let max_offset = TEXT_MAX_ROWS - self.max_rows as usize;
+        if (self.view_offset as usize) < max_offset {
+            self.view_offset += 1;
+            self.redraw_from_buf();
+        }
+    }
+
+    /// Scroll vers le bas
+    pub fn scroll_down(&mut self) {
+        if self.view_offset > 0 {
+            self.view_offset -= 1;
+            self.redraw_from_buf();
         }
     }
 }
@@ -313,6 +350,7 @@ pub static mut FB_WRITER: FbWriter = FbWriter {
     text_buf: [[b' '; TEXT_MAX_COLS]; TEXT_MAX_ROWS],
     bg: crate::ui::theme::DESKTOP_BG,
     bound_win: usize::MAX,
+    view_offset: 0,
 };
 
 /// Configure le FB_WRITER pour écrire dans la zone de contenu d'une fentre
