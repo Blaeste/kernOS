@@ -53,14 +53,16 @@ macro_rules! print {
     ($($arg:tt)*) => ({
         use core::fmt::Write;
         #[allow(unused_unsafe)]
-        unsafe { 
-            if *core::ptr::addr_of!($crate::io::framebuffer::FB_ACTIVE) {
-                write!(&mut *core::ptr::addr_of_mut!($crate::io::framebuffer::FB_WRITER), $($arg)*).unwrap();
-                $crate::io::framebuffer::swap_buffers();
-            } else {
-                write!(&mut *core::ptr::addr_of_mut!($crate::io::vga::WRITER), $($arg)*).unwrap() 
+        crate::io::framebuffer::PRINT_LOCK.with(|| {
+            unsafe { 
+                if *core::ptr::addr_of!($crate::io::framebuffer::FB_ACTIVE) {
+                    write!(&mut *core::ptr::addr_of_mut!($crate::io::framebuffer::FB_WRITER), $($arg)*).unwrap();
+                    $crate::io::framebuffer::swap_buffers();
+                } else {
+                    write!(&mut *core::ptr::addr_of_mut!($crate::io::vga::WRITER), $($arg)*).unwrap() 
+                }
             }
-        }
+        });
     });
 }
 

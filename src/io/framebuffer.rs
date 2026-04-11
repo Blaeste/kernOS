@@ -5,6 +5,11 @@
 use core::fmt;
 use core::ptr::{addr_of, addr_of_mut};
 
+use crate::klib::sync::SpinLock;
+
+/// Mutex protect
+pub static PRINT_LOCK: SpinLock = SpinLock::new();
+
 /// Infos globales du framebuffer, remplies au boot.
 pub static mut FB_ADDR:     u64 = 0;        // adresse physique du framebuffer
 pub static mut FB_WIDTH:    u32 = 0;        // largeur en pixels
