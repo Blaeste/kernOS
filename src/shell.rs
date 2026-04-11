@@ -139,27 +139,28 @@ fn execute(cmd: &[u8]) {
     if eq(name, b"help") {
         println!(concat!(
             "Commandes disponibles :\n",
-            "  help     - affiche cette aide\n",
-            "  clear    - efface l'ecran\n",
-            "  reboot   - redemarre la machine\n",
-            "  uptime   - temps depuis le demarrage\n",
-            "  memmap   - affiche la carte memoire\n",
-            "  frames   - affiche les frames libres\n",
-            "  pgtest   - teste la pagination\n",
-            "  tasks    - affiche les taches actives\n",
-            "  ls       - liste les fichiers\n",
-            "  cat      - affiche un fichier (cat nom)\n",
-            "  write    - cree un fichier (write nom contenu)\n",
-            "  rm       - supprime un fichier (rm nom)\n",
-            "  ataRead  - lit le secteur 0\n",
-            "  ataWrite - ecrit dans le secteur 0\n",
-            "  kfsLs    - liste fichiers disque\n",
-            "  kfsWrite - ecrit sur disque (kfsWrite nom contenu)\n",
-            "  kfsRead  - lit depuis disque (kfsRead nom)\n",
-            "  kfsDel   - supprime un fichier disque (kfsDel nom)",
-            "  layout   - change le layout clavier (layout azerty|qwerty)",
-            "  heapInfo - affiche l'état actuel de la heap",
-            "  spwan    - cree un task pour test le muti taches et scheduler",
+            "  help        - affiche cette aide\n",
+            "  clear       - efface l'ecran\n",
+            "  reboot      - redemarre la machine\n",
+            "  uptime      - temps depuis le demarrage\n",
+            "  memmap      - affiche la carte memoire\n",
+            "  frames      - affiche les frames libres\n",
+            "  pgtest      - teste la pagination\n",
+            "  tasks       - affiche les taches actives\n",
+            "  ls          - liste les fichiers\n",
+            "  cat         - affiche un fichier (cat nom)\n",
+            "  write       - cree un fichier (write nom contenu)\n",
+            "  rm          - supprime un fichier (rm nom)\n",
+            "  ataRead     - lit le secteur 0\n",
+            "  ataWrite    - ecrit dans le secteur 0\n",
+            "  kfsLs       - liste fichiers disque\n",
+            "  kfsWrite    - ecrit sur disque (kfsWrite nom contenu)\n",
+            "  kfsRead     - lit depuis disque (kfsRead nom)\n",
+            "  kfsDel      - supprime un fichier disque (kfsDel nom)\n",
+            "  layout      - change le layout clavier (layout azerty|qwerty)\n",
+            "  heapInfo    - affiche l'état actuel de la heap\n",
+            "  spwan       - cree un task pour test le muti taches et scheduler\n",
+            "  syscalltest - test syscall write on fd=1\n",
         ));
     }
 
@@ -346,6 +347,20 @@ fn execute(cmd: &[u8]) {
     else if eq(name, b"spawn") {
         crate::task::scheduler::spawn(test_task);
         println!("Tache lancee !");
+    }
+
+    else if eq(name, b"syscalltest") {
+        let msg = b"[syscall write] ca marche !\n";
+        unsafe {
+            core::arch::asm!(
+                "int 0x80",
+                in("rax") 0u64,                 // SYS_WRITE
+                in("rdi") 1u64,                 // fd=1 stdout
+                in("rsi") msg.as_ptr() as u64,
+                in("rdx") msg.len() as u64,
+                options(nostack)
+            );
+        }
     }
 
     else if name.is_empty() {

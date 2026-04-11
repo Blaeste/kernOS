@@ -35,6 +35,7 @@ mod shell;
 mod task;
 mod fs;
 mod ui;
+mod syscall;
 
 #[global_allocator]
 static ALLOCATOR: mem::allocator::FreeListAllocator = mem::allocator::FreeListAllocator;

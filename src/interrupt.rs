@@ -5,6 +5,7 @@ use crate::drivers::pic;				// pour appeler pic::eoi()
 use crate::drivers::mouse;
 use crate::drivers::keyboard;
 use crate::drivers::timer;
+use crate::syscall;
 
 /* 
 	Entrée IDT — 16 octets exacts lus directement par le CPU.
@@ -55,6 +56,12 @@ impl IdtEntry {
 			_reserved:		0,
 		}
 	}
+
+	pub fn new_user(handler: unsafe extern "C" fn()) -> Self {
+		let mut e = Self::new(handler);
+		e.flags = 0xEE;
+		e
+	}
 }
 
 /*
@@ -84,10 +91,17 @@ impl Idt {
 		}
 	}
 
-	// Enregistre un handler pour l'entrée index (0-255)
-	pub fn set_handler(&mut self, index: u8, handler: unsafe extern "C" fn()) {
-		self.entries[index as usize] = IdtEntry::new(handler);
-	}
+    // Handler kernel (DPL=0) — défaut
+    pub fn set_handler(&mut self, index: u8, handler: unsafe extern "C" fn()) {
+        self.entries[index as usize] = IdtEntry::new(handler);
+    }
+
+    // Handler accessible depuis ring 3 (DPL=3) — syscalls uniquement
+    pub fn set_handler_user(&mut self, index: u8, handler: unsafe extern "C" fn()) {
+        let mut entry = IdtEntry::new(handler);
+        entry.flags = 0xEE;
+        self.entries[index as usize] = entry;
+    }
 
     /* 
 		Charge l'IDT dans le registre IDTR du CPU via l'instruction lidt.
@@ -121,6 +135,7 @@ pub const IRQ_TIMER:		u8 = 32;	// IRQ0 - horloge système
 pub const IRQ_KEYBOARD:		u8 = 33;	// IRQ1 - clavier
 pub const IRQ_CASCADE:		u8 = 34;	// IRQ2 - liaison PIC esclave
 pub const IRQ_MOUSE:		u8 = 44;	// IRQ12 - souris
+pub const INT_SYSCALL:		u8 = 0x80;	// interrupt syscall
 
 // Handlers - Le CPU saute ici en cas d'exception
 // unsafe extern "C" : Le CPU appelle ces fonctions directement, pas Rust
@@ -195,6 +210,10 @@ pub extern "C" fn irq_mouse_inner() {
     let byte = unsafe { pic::inb(0x60) };
 	unsafe { pic::eoi(12); }
 	mouse::on_irq(byte);
+}
+
+pub extern "C" fn syscall_inner(num: u64, a1: u64, a2: u64, a3: u64) -> u64 {
+	syscall::syscall_handler(num, a1, a2, a3)
 }
 
 // ── Stubs naked — sauvegarde registres + iretq ──
@@ -273,24 +292,46 @@ pub unsafe extern "C" fn irq_mouse_stub() {
     );
 }
 
+#[unsafe(naked)]
+pub unsafe extern "C" fn syscall_stub() {
+ 	naked_asm!(
+        "push rax","push rbx","push rcx","push rdx",
+        "push rsi","push rdi","push rbp",
+        "push r8","push r9","push r10","push r11",
+        "push r12","push r13","push r14","push r15",
+        "mov rcx, rdx",
+		"mov rdx, rsi",
+		"mov rsi, rdi",
+		"mov rdi, rax",
+        "call {f}",
+        "pop r15","pop r14","pop r13","pop r12",
+        "pop r11","pop r10","pop r9","pop r8",
+        "pop rbp","pop rdi","pop rsi","pop rdx",
+        "pop rcx","pop rbx","pop rax",
+        "iretq",
+        f = sym syscall_inner,
+    );
+}
+
 // Initialise l'IDT avec tous les handlers
 pub fn init() {
 	unsafe {
 		let idt = core::ptr::addr_of_mut!(IDT);
-		(*idt).set_handler(DIVIDE_ERROR,	handler_divide_error);
-		(*idt).set_handler(DEBUG,			handler_debug);
-		(*idt).set_handler(NMI,				handler_nmi);
-		(*idt).set_handler(BREAKPOINT,		handler_breakpoint);
-		(*idt).set_handler(OVERFLOW,		handler_overflow);
-		(*idt).set_handler(BOUND_RANGE,		handler_bound_range);
-		(*idt).set_handler(INVALID_OPCODE,	handler_invalid_opcode);
-		(*idt).set_handler(DOUBLE_FAULT,	handler_double_fault);
-		(*idt).set_handler(GENERAL_PROTECT,	handler_general_protection);
-		(*idt).set_handler(PAGE_FAULT,		handler_page_fault);
-		(*idt).set_handler(IRQ_TIMER,   	irq_timer_stub);
-		(*idt).set_handler(IRQ_KEYBOARD, 	irq_keyboard_stub);
-		(*idt).set_handler(IRQ_CASCADE, 	irq_cascade_stub);
-		(*idt).set_handler(IRQ_MOUSE,   	irq_mouse_stub);
+		(*idt).set_handler(DIVIDE_ERROR,		handler_divide_error);
+		(*idt).set_handler(DEBUG,				handler_debug);
+		(*idt).set_handler(NMI,					handler_nmi);
+		(*idt).set_handler(BREAKPOINT,			handler_breakpoint);
+		(*idt).set_handler(OVERFLOW,			handler_overflow);
+		(*idt).set_handler(BOUND_RANGE,			handler_bound_range);
+		(*idt).set_handler(INVALID_OPCODE,		handler_invalid_opcode);
+		(*idt).set_handler(DOUBLE_FAULT,		handler_double_fault);
+		(*idt).set_handler(GENERAL_PROTECT,		handler_general_protection);
+		(*idt).set_handler(PAGE_FAULT,			handler_page_fault);
+		(*idt).set_handler(IRQ_TIMER,   		irq_timer_stub);
+		(*idt).set_handler(IRQ_KEYBOARD, 		irq_keyboard_stub);
+		(*idt).set_handler(IRQ_CASCADE, 		irq_cascade_stub);
+		(*idt).set_handler(IRQ_MOUSE,   		irq_mouse_stub);
+		(*idt).set_handler_user(INT_SYSCALL,	syscall_stub);
 		(*idt).load();
 	}
 }
