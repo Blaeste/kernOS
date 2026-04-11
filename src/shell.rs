@@ -158,7 +158,7 @@ fn execute(cmd: &[u8]) {
             "  kfsRead     - lit depuis disque (kfsRead nom)\n",
             "  kfsDel      - supprime un fichier disque (kfsDel nom)\n",
             "  layout      - change le layout clavier (layout azerty|qwerty)\n",
-            "  heapInfo    - affiche l'état actuel de la heap\n",
+            "  heapInfo    - affiche l'etat actuel de la heap\n",
             "  spwan       - cree un task pour test le muti taches et scheduler\n",
             "  syscalltest - test syscall write on fd=1\n",
         ));

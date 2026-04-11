@@ -1,11 +1,13 @@
 # KernOS — Roadmap
 
 ## Phase 1 — Fondations kernel
-- [ ] **Syscall** — int 0x80 / instruction syscall, frontière kernel/user
+- [x] **Syscall** — int 0x80, frontière kernel/user ✅
   - syscall write (affiche depuis userspace)
   - syscall exit (termine un processus)
   - table des syscalls extensible
-- [ ] **Userspace (ring 3)** — TSS, segments user, première tâche en ring 3
+- [x] **GDT + TSS** — nouvelle GDT complète, TSS avec RSP0, segments user ✅
+- [x] **Debug amélioré** — port 0xE9, exceptions avec RIP/CR2, panic handler ✅
+- [ ] **Première tâche ring 3** — iretq vers userspace, syscall depuis ring 3
 - [ ] **ELF loader** — parse un binaire ELF depuis KFS, mappe en mémoire, exécute en ring 3
 
 ## Phase 2 — Isolation et communication
@@ -42,3 +44,6 @@
 - [x] Free List allocator 256 Ko (alloc + free + fusion)
 - [x] Multitâche préemptif (context switch, round-robin, spawn, task_exit)
 - [x] SpinLock (klib/sync, protection println!)
+- [x] Syscalls int 0x80 (write + exit)
+- [x] GDT + TSS (5 segments + TSS, sélecteurs propagés)
+- [x] Debug amélioré (port 0xE9, exceptions GPF/PF avec RIP/CR2, panic handler, clamp font/swap)

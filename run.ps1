@@ -7,8 +7,8 @@ if (-not (Test-Path "target/disk.img")) {
 }
 if ($IsWindows) {
     wsl grub-mkrescue -o target/kernos.iso target/isodir
-    & "C:\Program Files\qemu\qemu-system-x86_64.exe" -cdrom target/kernos.iso -boot d -vga std -m 256 -drive file=target/disk.img,format=raw,index=0,media=disk
+    & "C:\Program Files\qemu\qemu-system-x86_64.exe" -cdrom target/kernos.iso -boot d -vga std -m 256 -drive file=target/disk.img,format=raw,index=0,media=disk -debugcon stdio
 } else {
     grub-mkrescue -o target/kernos.iso target/isodir
-    qemu-system-x86_64 -cdrom target/kernos.iso -boot d -vga std -m 256 -drive file=target/disk.img,format=raw,index=0,media=disk
+    qemu-system-x86_64 -cdrom target/kernos.iso -boot d -vga std -m 256 -drive file=target/disk.img,format=raw,index=0,media=disk -debugcon stdio
 }

@@ -47,6 +47,8 @@ stack_bottom:							; adresse de la base de la pile (non utilisée, mais bonne p
 	resb 16384							; réserve 16 Ko pour la pile
 stack_top:								; adresse du sommet de la pile (esp doit être initialisé à cette adresse)
 
+global stack_top
+
 ; ============================================================
 ; CODE 32-BIT — point d'entrée de QEMU
 ; ============================================================

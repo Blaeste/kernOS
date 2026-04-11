@@ -121,10 +121,13 @@ pub fn swap_buffers() {
         let w = *addr_of!(FB_WIDTH) as usize;
         let pitch = *addr_of!(FB_PITCH) as usize;
 
+        let h = *addr_of!(FB_HEIGHT) as usize;
+        let w_max = *addr_of!(FB_WIDTH) as usize;
         let x1 = DIRTY_X1 as usize;
         let y1 = DIRTY_Y1 as usize;
-        let x2 = DIRTY_X2 as usize;
-        let y2 = DIRTY_Y2 as usize;
+        let x2 = if (DIRTY_X2 as usize) > w_max { w_max } else { DIRTY_X2 as usize };
+        let y2 = if (DIRTY_Y2 as usize) > h { h } else { DIRTY_Y2 as usize };
+
         let copy_w = x2 - x1;
 
         let mut y = y1;
@@ -174,7 +177,9 @@ pub fn clear(color: u32) {
 /// fg = couleur du text, ng = couleur du fond.
 pub fn draw_char(x: u32, y: u32, c: u8, fg: u32, bg: u32) {
     mark_dirty(x, y, 8, 16);
-    let glyph = crate::io::font::FONT[c as usize];      // recupère les 16 lignes du caractère
+
+    let idx = if c < 128 { c as usize } else { b'?' as usize }; // attention on gere aps les accent pr le moment
+    let glyph = crate::io::font::FONT[idx];      // recupère les 16 lignes du caractère
 
     let mut row = 0;
     while row < 16 {

@@ -48,7 +48,7 @@ impl IdtEntry {
 		let addr = handler as u64;
 		IdtEntry {
 			offset_low:		(addr & 0xFFFF) as u16,				// bits 0-15
-			selector:		0x08,								// segment de code de la GDT
+			selector:		crate::gdt::KERNEL_CODE,			// segment de code de la GDT
 			ist:			0,									// 0 = utilise la stack courante, pas de stack dédiée aux interruptions
 			flags:			0x8E,								// 1000_1110 : present=1, DPL=0, type=interrupt gate
 			offset_mid:		((addr >> 16) & 0xFFFF) as u16,		// bits 16-31
@@ -140,53 +140,92 @@ pub const INT_SYSCALL:		u8 = 0x80;	// interrupt syscall
 // Handlers - Le CPU saute ici en cas d'exception
 // unsafe extern "C" : Le CPU appelle ces fonctions directement, pas Rust
 pub unsafe extern "C" fn handler_divide_error() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Division par zero !");
 	loop {}
 }
 
 pub unsafe extern "C" fn handler_debug() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Debug !");
 	loop {}
 }
 
 pub unsafe extern "C" fn handler_nmi() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: NMI -  erreur matériel grave !");
 	loop {}
 }
 
 pub unsafe extern "C" fn handler_breakpoint() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Breakpoint !");
 	// pas de loop{} — on continue l'exécution après un breakpoint
 }
 
 pub unsafe extern "C" fn handler_overflow() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Overflow !");
 	loop {}
 }
 
 pub unsafe extern "C" fn handler_bound_range() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Bound Range - acces hors bornes !");
 	loop {}
 }
 
 pub unsafe extern "C" fn handler_invalid_opcode() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Instruction invalide !");
 	loop {}
 }
 
 pub unsafe extern "C" fn handler_double_fault() {
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
 	println!("EXCEPTION: Double Fault — kernel mort !");
 	loop {}
 }
 
-pub unsafe extern "C" fn handler_general_protection() {
-	println!("EXCEPTION: General Protection Fault !");
-	loop {}
-}
+pub extern "C" fn gpf_inner(error: u64, rip: u64) {
 
-pub unsafe extern "C" fn handler_page_fault() {
-	println!("EXCEPTION: Page Fault !");
-	loop {}
+	crate::klib::debug::dbg_ln("!!! GPF !!!");
+    crate::klib::debug::dbg_str("RIP="); crate::klib::debug::dbg_hex(rip);
+    crate::klib::debug::dbg_str(" ERR="); crate::klib::debug::dbg_hex(error);
+    crate::klib::debug::dbg_ln("");
+
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
+    println!("=== GENERAL PROTECTION FAULT ===");
+    println!("  RIP:   0x{:X}", rip);
+    println!("  Error: 0x{:X}", error);
+    loop {}
+}
+pub extern "C" fn page_fault_inner(error: u64, rip: u64, cr2: u64) {
+
+	crate::klib::debug::dbg_ln("!!! PAGE FAULT !!!");
+    crate::klib::debug::dbg_str("RIP="); crate::klib::debug::dbg_hex(rip);
+    crate::klib::debug::dbg_str(" CR2="); crate::klib::debug::dbg_hex(cr2);
+    crate::klib::debug::dbg_ln("");
+
+	crate::io::framebuffer::PRINT_LOCK.force_unlock();
+	unsafe { core::arch::asm!("sti", options(nostack)); }
+    println!("=== PAGE FAULT ===");
+    println!("  RIP:   0x{:X}", rip);
+    println!("  CR2:   0x{:X}", cr2);
+    println!("  Error: 0x{:X}", error);
+    if error & 1 == 0 { println!("  -> page non presente"); }
+    if error & 2 != 0 { println!("  -> ecriture"); } else { println!("  -> lecture"); }
+    if error & 4 != 0 { println!("  -> depuis ring 3"); }
+    loop {}
 }
 
 // ── Vrais handlers (appelés depuis les stubs) ──
@@ -313,6 +352,27 @@ pub unsafe extern "C" fn syscall_stub() {
     );
 }
 
+#[unsafe(naked)]
+pub unsafe extern "C" fn page_fault_stub() {
+    naked_asm!(
+        "pop rdi",          // error code (poussé par le CPU)
+        "mov rsi, [rsp]",   // RIP (dans le frame iretq)
+        "mov rdx, cr2",     // adresse fautive
+        "call {f}",
+        f = sym page_fault_inner,
+    );
+}
+
+#[unsafe(naked)]
+pub unsafe extern "C" fn gpf_stub() {
+    naked_asm!(
+        "pop rdi",          // error code
+        "mov rsi, [rsp]",   // RIP
+        "call {f}",
+        f = sym gpf_inner,
+    );
+}
+
 // Initialise l'IDT avec tous les handlers
 pub fn init() {
 	unsafe {
@@ -325,8 +385,8 @@ pub fn init() {
 		(*idt).set_handler(BOUND_RANGE,			handler_bound_range);
 		(*idt).set_handler(INVALID_OPCODE,		handler_invalid_opcode);
 		(*idt).set_handler(DOUBLE_FAULT,		handler_double_fault);
-		(*idt).set_handler(GENERAL_PROTECT,		handler_general_protection);
-		(*idt).set_handler(PAGE_FAULT,			handler_page_fault);
+		(*idt).set_handler(GENERAL_PROTECT,  	gpf_stub);
+		(*idt).set_handler(PAGE_FAULT,       	page_fault_stub);
 		(*idt).set_handler(IRQ_TIMER,   		irq_timer_stub);
 		(*idt).set_handler(IRQ_KEYBOARD, 		irq_keyboard_stub);
 		(*idt).set_handler(IRQ_CASCADE, 		irq_cascade_stub);

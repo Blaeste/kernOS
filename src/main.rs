@@ -20,7 +20,7 @@
     On l'importe car notre fonction panic en a besoin.
 */
 use core::panic::PanicInfo;
-use core::ptr::addr_of_mut;
+use core::ptr::{addr_of_mut, addr_of};
 
 extern crate alloc;
 
@@ -36,6 +36,7 @@ mod task;
 mod fs;
 mod ui;
 mod syscall;
+mod gdt;
 
 #[global_allocator]
 static ALLOCATOR: mem::allocator::FreeListAllocator = mem::allocator::FreeListAllocator;
@@ -89,7 +90,15 @@ macro_rules! println {
     -> ! = le type de retour est ! = "cette fonction ne revient jamais". Le ! s'appelle le type "never". Logique : si le kernel panique, on ne peut pas continuer.
 */
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    klib::debug::dbg_ln("!!! PANIC !!!");
+    if let Some(loc) = info.location() {
+        klib::debug::dbg_str("  at ");
+        klib::debug::dbg_str(loc.file());
+        klib::debug::dbg_str(":");
+        klib::debug::dbg_hex(loc.line() as u64);
+        klib::debug::dbg_ln("");
+    }
     loop {}
 }
 
@@ -129,6 +138,11 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
 
     // Init mem
     mem::allocator::init();
+
+    // GDT + TSS pour ring 3
+    unsafe extern "C" { static stack_top: u8; }
+    let kstack = addr_of!(stack_top) as u64;
+    gdt::init(kstack);
 
     // Initialise l'affichage : framebuffer si disponible, sinon VGA texte
     if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {

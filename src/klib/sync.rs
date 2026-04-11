@@ -14,6 +14,7 @@ impl SpinLock {
 
     /// Acquiert le verrou (spin jusqu'a disponibilité)
     pub fn lock(&self) {
+        unsafe { core::arch::asm!("cli", options(nostack)); }
         while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
             core::hint::spin_loop();
         }
@@ -21,6 +22,12 @@ impl SpinLock {
 
     /// Libère le verrou
     pub fn unlock(&self) {
+        self.locked.store(false, Ordering::Release);
+        unsafe { core::arch::asm!("sti", options(nostack)); }
+    }
+
+     /// Libère le verrou
+    pub fn force_unlock(&self) {
         self.locked.store(false, Ordering::Release);
     }
 

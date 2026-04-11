@@ -63,7 +63,7 @@ pub fn spawn(entry: fn()) {
             ptr.add(j).write(0);                    // 15 registres = 0
         }
         ptr.add(15).write(entry as u64);            // RIP = adresse de la fonction
-        ptr.add(16).write(0x08);                    // CS = segment de code 64-bit (GDT)
+        ptr.add(16).write(crate::gdt::KERNEL_CODE as u64);  // CS = segment de code 64-bit (GDT)
         ptr.add(17).write(0x202);                   // RFLAGS = interruptions activées (IF=1)
         ptr.add(18).write(stack_top);               // RSP = sommet de la pile
         ptr.add(19).write(0x00);                    // SS = segment de données
