@@ -198,6 +198,9 @@ pub fn on_mouse_down(mx: i32, my: i32) {
                 FOCUSED_WIN = idx;
                 bring_to_front(idx);
                 NEEDS_REDRAW = true;
+                if idx == crate::ui::filewin::FILE_WIN_IDX {
+                    crate::ui::filewin::on_click(mx, my);
+                }
                 return;
             }
         }
