@@ -1,5 +1,7 @@
 /// Multitâche coopératif — scheduler round-robin
 
+use core::ptr::{addr_of_mut, addr_of};
+
 /// Taille de la pile pour chaque tâche (8 Ko)
 const STACK_SIZE:   usize = 8192;
 
@@ -33,7 +35,7 @@ pub fn spawn(entry: fn()) {
     let slot = unsafe {
         let mut s = usize::MAX;
         for i in 0..MAX_TASKS {
-            if !(*core::ptr::addr_of!(TASKS))[i].active {
+            if !(*addr_of!(TASKS))[i].active {
                 s = i;
                 break;
             }
@@ -47,7 +49,7 @@ pub fn spawn(entry: fn()) {
     }
 
     unsafe {
-        let task = &mut (*core::ptr::addr_of_mut!(TASKS))[slot];
+        let task = &mut (*addr_of_mut!(TASKS))[slot];
 
         // Le sommet de la pile = adresse du début du tableau + STACK_SIZE
         // (la pile grandit vers le bas en x86, donc on commence en haut)
@@ -78,20 +80,31 @@ pub fn spawn(entry: fn()) {
 pub fn schedule(old_rsp: u64) -> u64 {
     unsafe {
         // Sauvegarde le RSP de la tâche courrante
-        let cur = *core::ptr::addr_of!(CURRENT);
-        (*core::ptr::addr_of_mut!(TASKS))[cur].rsp = old_rsp;
+        let cur = *addr_of!(CURRENT);
+        (*addr_of_mut!(TASKS))[cur].rsp = old_rsp;
 
         // Round-robin : cherche la prochaine tâche active
         let mut next = cur;
         for _ in 0..MAX_TASKS {
             next = (next + 1) % MAX_TASKS;
-            if (*core::ptr::addr_of!(TASKS))[next].active {
+            if (*addr_of!(TASKS))[next].active {
                 break;
             }
         }
 
         // Met à jour l'index courant et retourne le RSP de la prochaine tâche
-        *core::ptr::addr_of_mut!(CURRENT) = next;
-        (*core::ptr::addr_of!(TASKS))[next].rsp
+        *addr_of_mut!(CURRENT) = next;
+        (*addr_of!(TASKS))[next].rsp
     }
+}
+
+/// Termine la tâche courante
+pub fn task_exit() {
+    unsafe {
+        let cur = *addr_of!(CURRENT);
+        (*addr_of_mut!(TASKS))[cur].active = false;
+        // Force un reschedule immédiat
+        core::arch::asm!("int 0x20", options(nostack));
+    }
+    loop {} // jamais atteint
 }

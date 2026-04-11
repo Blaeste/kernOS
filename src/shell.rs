@@ -112,6 +112,21 @@ pub fn on_char(ch: u8) {
     }
 }
 
+/// Test task
+fn test_task() {
+    println!("[Tache 1] Salut depuis une autre tache !");
+    let mut i: u32 = 0;
+    while i < 5 {
+        println!("[Tache 1] tick {}", i);
+        // attendre active (env 1sec)
+        let mut j: u32 = 0;
+        while j < 10_000_000 { j += 1; }
+        i += 1;
+    }
+    println!("[Tache 1] Termine !");
+    crate::task::scheduler::task_exit();
+}
+
 /// Parse et dispatch une commande.
 /// Découpe cmd en (name, args) sur le premier espace,
 /// puis matche name exactement — aucun risque de collision de préfixe.
@@ -144,6 +159,7 @@ fn execute(cmd: &[u8]) {
             "  kfsDel   - supprime un fichier disque (kfsDel nom)",
             "  layout   - change le layout clavier (layout azerty|qwerty)",
             "  heapInfo - affiche l'état actuel de la heap",
+            "  spwan    - cree un task pour test le muti taches et scheduler",
         ));
     }
 
@@ -325,6 +341,11 @@ fn execute(cmd: &[u8]) {
     else if eq(name, b"heapInfo") {
         let (total, free, blocks) = crate::mem::allocator::heap_info();
         println!("Heap: {} Ko total, {} Ko libre, {} blocks libres", total / 1024, free / 1024, blocks);
+    }
+
+    else if eq(name, b"spawn") {
+        crate::task::scheduler::spawn(test_task);
+        println!("Tache lancee !");
     }
 
     else if name.is_empty() {
