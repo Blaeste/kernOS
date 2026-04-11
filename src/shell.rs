@@ -141,7 +141,8 @@ fn execute(cmd: &[u8]) {
             "  kfsLs    - liste fichiers disque\n",
             "  kfsWrite - ecrit sur disque (kfsWrite nom contenu)\n",
             "  kfsRead  - lit depuis disque (kfsRead nom)\n",
-            "  kfsDel  - supprime un fichier disque (kfsDel nom)",
+            "  kfsDel   - supprime un fichier disque (kfsDel nom)",
+            "  layout   - change le layout clavier (layout azerty|qwerty)",
         ));
     }
 
@@ -305,6 +306,18 @@ fn execute(cmd: &[u8]) {
             println!("OK");
         } else {
             println!("fichier introuvable");
+        }
+    }
+
+    else if eq(name, b"layout") {
+        if eq(args, b"azerty") {
+            unsafe { crate::drivers::keyboard::LAYOUT = crate::drivers::keyboard::Layout::Azerty; }
+            println!("Layout: AZERTY");
+        } else if eq(args, b"qwerty") {
+            unsafe { crate::drivers::keyboard::LAYOUT = crate::drivers::keyboard::Layout::Qwerty; }
+            println!("Layout: QWERTY");
+        } else {
+            println!("usage: layout azerty|qwerty");
         }
     }
 
