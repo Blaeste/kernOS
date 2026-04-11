@@ -37,7 +37,7 @@ mod fs;
 mod ui;
 
 #[global_allocator]
-static ALLOCATOR: mem::allocator::BumpAllocator = mem::allocator::BumpAllocator;
+static ALLOCATOR: mem::allocator::FreeListAllocator = mem::allocator::FreeListAllocator;
 
 /// Adresse Multiboot2 info — stockée au boot pour utilisation ultérieure (shell, etc.)
 pub static mut MULTIBOOT_ADDR: u64 = 0;
@@ -52,6 +52,7 @@ pub static mut MULTIBOOT_ADDR: u64 = 0;
 macro_rules! print {
     ($($arg:tt)*) => ({
         use core::fmt::Write;
+        #[allow(unused_unsafe)]
         unsafe { 
             if *core::ptr::addr_of!($crate::io::framebuffer::FB_ACTIVE) {
                 write!(&mut *core::ptr::addr_of_mut!($crate::io::framebuffer::FB_WRITER), $($arg)*).unwrap();
@@ -122,6 +123,9 @@ fn panic(_info: &PanicInfo) -> ! {
 pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // Sauvegarde l'adresse Multiboot2 pour que le shell puisse y accéder
     unsafe { *addr_of_mut!(MULTIBOOT_ADDR) = multiboot_addr; }
+
+    // Init mem
+    mem::allocator::init();
 
     // Initialise l'affichage : framebuffer si disponible, sinon VGA texte
     if let Some(fb) = multiboot::find_framebuffer(multiboot_addr) {

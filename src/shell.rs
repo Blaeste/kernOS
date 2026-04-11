@@ -143,6 +143,7 @@ fn execute(cmd: &[u8]) {
             "  kfsRead  - lit depuis disque (kfsRead nom)\n",
             "  kfsDel   - supprime un fichier disque (kfsDel nom)",
             "  layout   - change le layout clavier (layout azerty|qwerty)",
+            "  heapInfo - affiche l'état actuel de la heap",
         ));
     }
 
@@ -319,6 +320,11 @@ fn execute(cmd: &[u8]) {
         } else {
             println!("usage: layout azerty|qwerty");
         }
+    }
+
+    else if eq(name, b"heapInfo") {
+        let (total, free, blocks) = crate::mem::allocator::heap_info();
+        println!("Heap: {} Ko total, {} Ko libre, {} blocks libres", total / 1024, free / 1024, blocks);
     }
 
     else if name.is_empty() {
