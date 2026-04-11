@@ -20,6 +20,14 @@ pub extern "C" fn syscall_handler(num: u64, a1: u64, a2: u64, a3: u64) -> u64 {
 /// fd 1 = stdout (terminal)
 fn sys_write(fd: u64, buf_ptr: u64, len: u64) -> u64 {
 
+    crate::klib::debug::dbg_str("[SYS_WRITE] fd=");
+    crate::klib::debug::dbg_hex(fd);
+    crate::klib::debug::dbg_str(" ptr=");
+    crate::klib::debug::dbg_hex(buf_ptr);
+    crate::klib::debug::dbg_str(" len=");
+    crate::klib::debug::dbg_hex(len);
+    crate::klib::debug::dbg_ln("");
+
     if fd != 1 { return u64::MAX ;}
 
     let slice = unsafe {

@@ -1,7 +1,7 @@
 /// GDT + TSS — nécessaire pour ring 3 et isolation des piles
 
 use core::arch::asm;
-use core::ptr::addr_of;
+use core::ptr::{addr_of, addr_of_mut};
 
 /// TSS (Task State Segment) - le CPU y lit la pile kernel (RSP0)
 /// quand il reçoit un interruption depuis ring 3
@@ -64,11 +64,14 @@ pub static mut GDT: Gdt = Gdt {
     tss_high:       0,
 };
 
+static mut KERNEL_INT_STACK: [u8; 8192] = [0; 8192];
+
 /// Initialise la GDT + TSS et le schage dans le CPU
 pub fn init(kernel_stack_top: u64) {
     unsafe {
         // RSP0 - pile kernel (le CPU switch ici depusi le ring 3)
-        TSS.rsp0 = kernel_stack_top;
+        let int_stack_top = addr_of_mut!(KERNEL_INT_STACK) as u64 + 8192;
+        TSS.rsp0 = int_stack_top;
 
         let tss_addr = addr_of!(TSS) as u64;
         let tss_size = (core::mem::size_of::<Tss>() - 1) as u64;

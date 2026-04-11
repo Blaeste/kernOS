@@ -87,7 +87,7 @@ _start32:
 setup_page_tables:
 	; P4[0] -> P3
 	mov eax, p3_table					; adresse de la table P3
-	or eax, 0b11						; bits 0 et 1 = present + writable
+	or eax, 0b111						; bits 0 et 1 = present + writable
 	mov [p4_table], eax					; la table P4 pointe vers la table P3
 
 	; P3[0] -> P2+0, P3[1] -> P2+4096, P3[2] -> P2+8192, P3[3] -> P2+12288
@@ -97,7 +97,7 @@ setup_page_tables:
 	mov edx, ecx						; copie ecx dans edx pour le calcul d'offset
 	shl edx, 12							; edx = ecx x 4096 (offset de chaque table P2)
 	add eax, edx
-	or eax, 0b11						; bits 0 et 1 = present + writable
+	or eax, 0b111						; bits 0 et 1 = present + writable
 	mov [p3_table + ecx * 8], eax		; la table P3 pointe vers la table P2
 	inc ecx								; passe à la table P2 suivante
 	cmp ecx, 4							; 4 tables P2 = 4 Go
@@ -108,7 +108,7 @@ setup_page_tables:
 .loop:									; La boucle mappe 2048 × 2 Mo = 4 Go de RAM en identity map
 	mov eax, 0x200000					; 2 Mo = taille d'une huge page (bit 7 de la table de pages)
 	mul ecx								; eax = adresse physique de la page à mapper
-	or eax, 0b10000011					; ajoute le bit 7 = huge page (pages de 2 Mo au lieu de 4 Ko — plus simple pour démarrer)
+	or eax, 0b10000111					; ajoute le bit 7 = huge page (pages de 2 Mo au lieu de 4 Ko — plus simple pour démarrer)
 	mov [p2_table + ecx * 8], eax		; la table P2 pointe vers la page physique
 	inc ecx								; passe à la page suivante
 	cmp ecx, 2048						; 2048 × 2 Mo = 4 Go de RAM

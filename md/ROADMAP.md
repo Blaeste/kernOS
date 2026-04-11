@@ -7,7 +7,7 @@
   - table des syscalls extensible
 - [x] **GDT + TSS** — nouvelle GDT complète, TSS avec RSP0, segments user ✅
 - [x] **Debug amélioré** — port 0xE9, exceptions avec RIP/CR2, panic handler ✅
-- [ ] **Première tâche ring 3** — iretq vers userspace, syscall depuis ring 3
+- [x] **Première tâche ring 3** — iretq vers userspace, syscall depuis ring 3 ✅
 - [ ] **ELF loader** — parse un binaire ELF depuis KFS, mappe en mémoire, exécute en ring 3
 
 ## Phase 2 — Isolation et communication
@@ -45,5 +45,6 @@
 - [x] Multitâche préemptif (context switch, round-robin, spawn, task_exit)
 - [x] SpinLock (klib/sync, protection println!)
 - [x] Syscalls int 0x80 (write + exit)
-- [x] GDT + TSS (5 segments + TSS, sélecteurs propagés)
-- [x] Debug amélioré (port 0xE9, exceptions GPF/PF avec RIP/CR2, panic handler, clamp font/swap)
+- [x] GDT + TSS (5 segments + TSS, selecteurs propagés)
+- [x] Debug ameliore (port 0xE9, exceptions GPF/PF avec RIP/CR2, panic handler, clamp font/swap)
+- [x] Ring 3 userspace (spawn_ring3, pile dédiée TSS, pages U/S, Hello ring 3!)

@@ -73,6 +73,39 @@ pub fn spawn(entry: fn()) {
     }
 }
 
+/// Spawn user ring3
+pub fn spawn_ring3(entry: u64, user_stack: u64) {
+    unsafe {
+        let slot = {
+            let tasks = &mut *addr_of_mut!(TASKS);
+            let mut found = usize::MAX;
+            let mut i = 1;
+            while i < MAX_TASKS {
+                if !tasks[i].active { found = i; break; }
+                i += 1;
+            }
+            found
+        };
+        if slot == usize::MAX { return; }
+
+        let tasks = &mut *addr_of_mut!(TASKS);
+        let task = &mut tasks[slot];
+
+        // Frame iretq poru ring3 (5 valeurs) + 15 registres = 20 valeurs
+        let ptr = (user_stack - 160) as *mut u64;
+        let mut j = 0;
+        while j < 15 { ptr.add(j).write(0); j += 1; }
+        ptr.add(15).write(entry);
+        ptr.add(16).write(crate::gdt::USER_CODE as u64);
+        ptr.add(17).write(0x202);
+        ptr.add(18).write(user_stack);
+        ptr.add(19).write(crate::gdt::USER_DATA as u64);
+
+        task.rsp = user_stack - 160;
+        task.active = true;
+    }
+}
+
 /// Appelée par le timer (100Hz). Choisit la prochaine tâche active
 /// et fait le context switch.
 /// old_rsp = le RSP de la tâche qu'on vient d'interrompre

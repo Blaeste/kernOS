@@ -161,6 +161,7 @@ fn execute(cmd: &[u8]) {
             "  heapInfo    - affiche l'etat actuel de la heap\n",
             "  spwan       - cree un task pour test le muti taches et scheduler\n",
             "  syscalltest - test syscall write on fd=1\n",
+            "  ring3       - lance une tache en ring 3\n",
         ));
     }
 
@@ -361,6 +362,11 @@ fn execute(cmd: &[u8]) {
                 options(nostack)
             );
         }
+    }
+
+    else if eq(name, b"ring3") {
+        crate::klib::debug::dbg_ln("[DBG] jumping to ring3...");
+        crate::userspace::spawn_user();
     }
 
     else if name.is_empty() {
