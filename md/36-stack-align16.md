@@ -33,7 +33,29 @@ naturellement alignées à 16 octets par convention de section.
 Sur Linux (ELF), `[u8; N]` a l'alignement déclaré = **1** → le linker
 peut placer la pile à n'importe quelle adresse.
 
-## Fix
+## Fix — approche kernel standard
+
+La vraie solution est de **désactiver SSE au niveau du compilateur**,
+comme le fait Linux kernel (`-mno-sse`). Sans SSE, LLVM ne peut pas
+générer `MOVAPS`/`MOVDQA`, donc l'alignement des buffers n'a plus d'importance.
+
+### `.cargo/config.toml`
+
+```toml
+rustflags = [
+    "-C", "link-arg=-Tlinker.ld",
+    "-C", "relocation-model=static",
+    "-C", "target-feature=-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2"
+]
+```
+
+Un seul flag, zéro wrapper dans le code. Le compilateur utilise
+`REP STOSD`/`MOV` (instructions GP) au lieu de SSE pour les gros copies/memset.
+
+### Piles d'interruption — `#[repr(align(16))]` conservé
+
+Même sans SSE, les piles kernel doivent être 16-byte alignées pour que
+`RSP avant call ≡ 0 (mod 16)` — exigence de l'ABI x86-64 (pas de SSE).
 
 Ajouter `#[repr(align(16))]` sur toutes les piles statiques :
 
@@ -97,34 +119,9 @@ let head = core::ptr::addr_of_mut!(HEAP.0) as *mut FreeBlock;
 Si `HEAP` est à une adresse non multiple de 16 → `#GP` dès `allocator::init()`,
 soit au tout début du kernel — avant même d'afficher quoi que ce soit.
 
-### `io/framebuffer.rs` — text_buf et BACK_BUF
-
-```rust
-// FbWriter : text_buf en premier (offset 0 = toujours aligné)
-#[repr(C, align(16))]
-pub struct FbWriter {
-    pub text_buf: [[u8; TEXT_MAX_COLS]; TEXT_MAX_ROWS],  // offset 0
-    pub row: u32, ...
-}
-
-// BACK_BUF 8 Mo
-#[repr(align(16))]
-struct BackBuf([u32; 2_073_600]);
-static mut BACK_BUF: BackBuf = BackBuf([0; 2_073_600]);
-```
-
-`clear_screen()` fait `self.text_buf = [[b' '; 100]; 200]` = 20 Ko.
-Sans `align(16)`, `text_buf` était à l'offset 24 dans `FbWriter`
-(6 × u32 = 24 octets, 24 mod 16 = 8) → non aligné → `#GP` dès le boot
-si le compilateur Linux utilise `MOVAPS` pour le memset.
-
-`BACK_BUF` : `copy_nonoverlapping` de chaque ligne de pixels peut générer
-du SSE vectorisé → même problème si le buffer commence à une adresse 4n.
-
 ## Fichiers modifiés
 
-- `src/mem/allocator.rs` — `Heap` + `addr_of_mut!(HEAP.0)`
-- `src/gdt.rs` — `IntStack` + `addr_of_mut!(KERNEL_INT_STACK.0)`
-- `src/userspace.rs` — `UserStack` + `addr_of_mut!(USER_STACK.0)`
-- `src/task/scheduler.rs` — `Task` `align(16)`, champ `stack` en premier
-- `src/io/framebuffer.rs` — `FbWriter` `align(16)` + `text_buf` en premier, `BackBuf` wrapper
+- `.cargo/config.toml` — désactivation SSE (`-C target-feature=-sse,...`)
+- `src/gdt.rs` — `IntStack` align(16) pour `KERNEL_INT_STACK`
+- `src/userspace.rs` — `UserStack` align(16) pour `USER_STACK`
+- `src/task/scheduler.rs` — `Task` align(16), champ `stack` en premier
