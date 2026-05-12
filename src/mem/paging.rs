@@ -83,6 +83,11 @@ const WRITABLE: u64 = 1 << 1;
 /// C'est ce que boot.asm utilise pour mapper le 1er Go rapidement.
 const HUGE_PAGE: u64 = 1 << 7;
 
+/// Bit 2 - USER : si c ebit est à 0, la page est réservé au kernel (ring 0).
+/// Toute tentative d'accès depuis le ring 3 déclenche un General Protection Fault.
+/// Doit être mis sur TOUS les niveaux de la table (PML4, PDPT, PD, PT).
+const USER: u64 = 1 << 2;
+
 /// Masque pour extraire l'adresse physique d'une entrée.
 /// Les bits 12 à 51 contiennent l'adresse (alignée sur 4 Ko).
 /// Les bits 0-11 sont les flags, les bits 52-63 sont d'autres flags.
@@ -228,6 +233,65 @@ pub fn map(virt: u64, phys: u64) {
 
     // Invalide le TLB pour cette adresse : le CPU doit relire les tables
     // au lieu d'utiliser son cache (qui a peut-être l'ancien mapping).
+    invlpg(virt);
+}
+
+/// Mappe un page virtuelle de 4 Ko vers un frame physique en mode USER (ring 3).
+///
+/// Identique à map(), mais ajoute le bit USER (bit 2) sur toutes les entrées
+/// intermédiaires ET sur la feuille PT. Sans ce bit sur CHAQUE niveau,
+/// le CPU refuse l'accès depuis ring 3 et déclenche un General Protection Fault.
+///
+/// Si une table intermédiaire existe déjà (crée par map() sans USER),
+/// on lui ajoute rétroactivement le bit USER avec |= USER.
+pub fn map_user(virt: u64, phys: u64) {
+
+    let pml4 = table_at(read_cr3() & ADDR_MASK);
+
+    let i4 = ((virt >> 39) & 0x1FF) as usize;
+    let i3 = ((virt >> 30) & 0x1FF) as usize;
+    let i2 = ((virt >> 21) & 0x1FF) as usize;
+    let i1 = ((virt >> 12) & 0x1FF) as usize;
+
+    // ── Niveau 4 : PML4 → PDPT ──────────────────────────
+    if pml4[i4] & PRESENT == 0 {
+        let f = frame::alloc().expect("paging: plus de frames");
+        zero_frame(f);
+        pml4[i4] = f | PRESENT | WRITABLE | USER;
+    } else {
+        // Table déjà créé (peu être par map() kernel) : on force le bit USER
+        // car le CPU vérifie ce bit à chaque niveau de la descente.
+        pml4[i4] |= USER;
+    }
+    let pdpt = table_at(pml4[i4] & ADDR_MASK);
+
+    // ── Niveau 3 : PDPT → PD ────────────────────────────
+    if pdpt[i3] & PRESENT == 0 {
+        let f = frame::alloc().expect("paging: plus de frames");
+        zero_frame(f);
+        pdpt[i3] = f | PRESENT | WRITABLE | USER;
+    } else {
+        pdpt[i3] |= USER;
+    }
+    let pd = table_at(pdpt[i3] & ADDR_MASK);
+
+    // ── Niveau 2 : PD → PT ──────────────────────────────
+    // Refuse de toucher aux huge pages 2 Mo du boot (même raison que map())
+    if pd[i2] & HUGE_PAGE != 0 { return; }
+
+    if pd[i2] & PRESENT == 0 {
+        let f = frame::alloc().expect("paging: plus de frames");
+        zero_frame(f);
+        pd[i2] = f | PRESENT | WRITABLE | USER;
+    } else {
+        pd[i2] |= USER;
+    }
+    let pt = table_at(pd[i2] & ADDR_MASK);
+
+    // ── Niveau 1 : PT → Page physique ────────────────────
+    // USER ici = la page elle-même est accessible depuis ring 3.
+    pt[i1] = phys | PRESENT | WRITABLE | USER;
+
     invlpg(virt);
 }
 
