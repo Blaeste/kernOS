@@ -9,10 +9,13 @@ pub const SYS_EXIT:         u64 = 1;
 /// Handler principal - appelé depuis le stub int 0x80
 /// rax = numéro, rdi = arg1, rsi = arg2, rdx = arg3
 pub extern "C" fn syscall_handler(num: u64, a1: u64, a2: u64, a3: u64) -> u64 {
+    // Re-active les interruptions : les syscalls doivent etre preemptibles
+    // pour eviter un deadlock sur PRINT_LOCK si le timer avait switche mid-print.
+    unsafe { core::arch::asm!("sti", options(nostack)); }
     match num {
         SYS_WRITE   => sys_write(a1, a2, a3),
         SYS_EXIT    => sys_exit(a1),
-        _           => u64::MAX,                // syscall inconnu
+        _           => u64::MAX,
     }
 }
 

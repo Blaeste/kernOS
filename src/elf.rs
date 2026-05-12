@@ -160,11 +160,17 @@ pub fn load(bytes: &[u8]) -> Option<u64> {
         // On avance de 4096 en 4096 jusqu'à avoir couvert tout memsz.
         let mut done = 0usize;
         while done < memsz {
-            let frame_phys = frame::alloc()?;
-
-            // Adresse virtuelle de cette page, alignée sur 4 Ko
+            // Si la page est déjà mappée (autre segment sur la même page),
+            // on réutilise le frame existant au lieu d'en allouer un nouveau.
             let vpage = (vaddr as usize + done) & !0xFFF;
-            paging::map_user(vpage as u64, frame_phys);
+            let frame_phys = match paging::translate(vpage as u64) {
+                Some(phys) => phys & !0xFFF,
+                None => {
+                    let f = frame::alloc()?;
+                    paging::map_user(vpage as u64, f);
+                    f
+                }
+            };
 
             // La première page peut démarrer en millieu de frame si p_vaddr
             // n'est pas aligné sur 4 Ko (ex: 0x401008 → page_off = 8).

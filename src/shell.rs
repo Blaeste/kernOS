@@ -162,6 +162,7 @@ fn execute(cmd: &[u8]) {
             "  spwan       - cree un task pour test le muti taches et scheduler\n",
             "  syscalltest - test syscall write on fd=1\n",
             "  ring3       - lance une tache en ring 3\n",
+            "  run         - lance un ELF en ring 3\n",
         ));
     }
 
@@ -367,6 +368,10 @@ fn execute(cmd: &[u8]) {
     else if eq(name, b"ring3") {
         crate::klib::debug::dbg_ln("[DBG] jumping to ring3...");
         crate::userspace::spawn_user();
+    }
+
+    else if eq(name, b"run") {
+        crate::userspace::spawn_elf();
     }
 
     else if name.is_empty() {

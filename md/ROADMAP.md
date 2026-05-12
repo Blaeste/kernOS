@@ -42,8 +42,8 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 - [x] Parser ELF64 — lire les headers `Elf64_Phdr`, identifier les segments `PT_LOAD`
 - [x] Allouer des frames user — pour chaque segment : frame allocator → pages U/S mappées
 - [x] Copier les segments — charger le code/data à leur adresse virtuelle cible
-- [ ] Lancer en ring 3 — `include_bytes!` + `elf::load()` + `spawn_ring3()` depuis le shell
-- [ ] Stocker les ELF dans KFS — un fichier KFS = un binaire exécutable
+- [x] Lancer en ring 3 — `include_bytes!` + `elf::load()` + `spawn_ring3()` depuis le shell → **"Hello from ELF!" ✅**
+- [ ] Stocker les ELF dans KFS — un fichier KFS = un binaire exécutable (Phase D)
 
 **Milestone :** `run monprog` dans le shell charge et exécute un ELF depuis le disque en ring 3.
 

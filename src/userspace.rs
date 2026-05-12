@@ -34,3 +34,32 @@ pub fn spawn_user() {
         crate::task::scheduler::spawn_ring3(entry, stack_top);
     }
 }
+
+/// Charge et lance le binaire ELF embarqué user/hello en ring 3.
+///
+/// Étapes :
+///   1. elf::load() — parse les segments PT_LOAD, alloue des frames, mappe en user
+///   2. frame::alloc() + map_user() — une page de pile accessible depuis ring 3
+///   3. spawn_ring3() — prépare le contexte iretq et active la tâche
+pub fn spawn_elf() {
+    // ELF embarqué à la compilation — chemin relatif depuis src/
+    static ELF: &[u8] = include_bytes!(
+        "../user/hello/target/x86_64-unknown-none/debug/hello"
+    );
+
+    let entry = match crate::elf::load(ELF) {
+        Some(e) => e,
+        None => {
+            crate::println!("run: ELF invalide");
+            return;
+        }
+    };
+
+    // Alloue une page de pile user (4 Ko) mappé à 0x500000
+    // le sommet de la pile = 0x501000 (la pile x86 grandit ver sle bas)
+    let stack_frame = crate::mem::frame::alloc().expect("run: plsu de frames");
+    crate::mem::paging::map_user(0x500000, stack_frame);
+
+    crate::task::scheduler::spawn_ring3(entry, 0x501000);
+    crate::println!("run: ELF lance, entry=0x{:x}", entry);
+}
