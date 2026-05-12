@@ -4,8 +4,11 @@ use core::ptr;
 /// Taille du heap : 256 Ko
 const HEAP_SIZE: usize = 256 * 1024;
 
-/// Heap statique
-static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+// align(16) : le compilateur peut générer MOVAPS/SSE pour copier FreeBlock (16 octets).
+// Sans alignement, #GP immédiat sur Linux si HEAP atterrit à une adresse impaire.
+#[repr(align(16))]
+struct Heap([u8; HEAP_SIZE]);
+static mut HEAP: Heap = Heap([0; HEAP_SIZE]);
 
 /// En-tête d'un bloc libre (liste chainée)
 #[repr(C)]
@@ -22,7 +25,7 @@ static mut FREE_HEAD: *mut FreeBlock = ptr::null_mut();
 /// Initialise le heap : un seul gros bloc libre
 pub fn init() {
     unsafe {
-        let head = core::ptr::addr_of_mut!(HEAP) as *mut FreeBlock;
+        let head = core::ptr::addr_of_mut!(HEAP.0) as *mut FreeBlock;
         (*head).size = HEAP_SIZE;
         (*head).next = ptr::null_mut();
         FREE_HEAD = head;

@@ -11,17 +11,20 @@ pub const MAX_TASKS:    usize = 8;
 /// Une tâche = une pile + un pointeur de pile sauvegardé
 /// Quand on switch de tâche, on sauvegarde RSP (Register Stack Pointer) ici
 /// et on restaure le RSP de la prochaine tâche.
-#[repr(C)]
+// align(16) : stack_top = &stack[0] + STACK_SIZE doit être ≡ 0 (mod 16)
+// pour que le premier iretq vers la tâche place RSP correctement.
+// stack en premier (offset 0) → &stack[0] = adresse de la Task = 16-byte alignée.
+#[repr(C, align(16))]
 pub struct Task {
+    pub stack:  [u8; STACK_SIZE],  // La pile (en premier → offset 0, alignée 16)
     pub rsp:    u64,               // pointeur de pile sauvegardé
-    pub stack:  [u8; STACK_SIZE],  // La pile elle-même
     pub active: bool,
 }
 
 /// Tableau de toutes les tâches (slots fixes)
 pub static mut TASKS: [Task; MAX_TASKS] = [const { Task {
-    rsp:    0,
     stack:  [0; STACK_SIZE],
+    rsp:    0,
     active: false,
 } }; MAX_TASKS];
 

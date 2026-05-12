@@ -64,13 +64,20 @@ pub static mut GDT: Gdt = Gdt {
     tss_high:       0,
 };
 
-static mut KERNEL_INT_STACK: [u8; 8192] = [0; 8192];
+// Pile kernel dédiée aux interruptions depuis ring 3.
+// Doit être alignée sur 16 octets : le CPU saute ici via TSS.rsp0, puis
+// le stub pousse 15 regs + le CPU a déjà poussé 5 valeurs = 160 octets.
+// RSP avant call = rsp0 - 160 ; pour que le call soit aligné : rsp0 ≡ 0 (mod 16).
+// Sans align(16) le linker Linux place [u8;N] à n'importe quelle adresse → #GP SSE.
+#[repr(align(16))]
+struct IntStack([u8; 8192]);
+static mut KERNEL_INT_STACK: IntStack = IntStack([0; 8192]);
 
 /// Initialise la GDT + TSS et le schage dans le CPU
 pub fn init(kernel_stack_top: u64) {
     unsafe {
         // RSP0 - pile kernel (le CPU switch ici depusi le ring 3)
-        let int_stack_top = addr_of_mut!(KERNEL_INT_STACK) as u64 + 8192;
+        let int_stack_top = addr_of_mut!(KERNEL_INT_STACK.0) as u64 + 8192;
         TSS.rsp0 = int_stack_top;
 
         let tss_addr = addr_of!(TSS) as u64;

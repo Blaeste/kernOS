@@ -1,5 +1,9 @@
-/// Pile user - 8 ko static poru l'instant
-static mut USER_STACK:      [u8; 8192] = [0; 8192];
+use core::ptr::addr_of_mut;
+
+// Pile ring 3 — même contrainte que KERNEL_INT_STACK : align(16) requis.
+#[repr(align(16))]
+struct UserStack([u8; 8192]);
+static mut USER_STACK: UserStack = UserStack([0; 8192]);
 
 static MSG: [u8; 14] = *b"Hello ring 3!\n";
 
@@ -25,7 +29,7 @@ unsafe extern "C" fn user_task() {
 /// Lance la tache userspace
 pub fn spawn_user() {
     unsafe {
-        let stack_top = core::ptr::addr_of_mut!(USER_STACK).cast::<u8>().add(8192) as u64;
+        let stack_top = addr_of_mut!(USER_STACK.0) as u64 + 8192;
         let entry = user_task as *const () as u64;
         crate::task::scheduler::spawn_ring3(entry, stack_top);
     }

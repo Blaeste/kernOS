@@ -17,8 +17,11 @@ pub static mut FB_HEIGHT:   u32 = 0;        // hauteur en pixels
 pub static mut FB_PITCH:    u32 = 0;        // octets par ligne
 pub static mut FB_ACTIVE:   bool = false;   // true si le framebuffer est actif
 
-/// Back buffer pour le double buffering (max 1920×1080)
-static mut BACK_BUF:        [u32; 2_073_600] = [0; 2_073_600];
+// align(16) : swap_buffers() fait des copy_nonoverlapping que LLVM peut vectoriser
+// avec MOVDQA/AVX (16-byte aligned). Sans ça, #GP si BACK_BUF atterrit à 4n sur Linux.
+#[repr(align(16))]
+struct BackBuf([u32; 2_073_600]);
+static mut BACK_BUF: BackBuf = BackBuf([0; 2_073_600]);
 
 /// Dirty rect
 static mut DIRTY_X1:    u32 = 0;    // coin haut gauche X
@@ -32,17 +35,20 @@ const TEXT_MAX_COLS:        usize = 100;
 const TEXT_MAX_ROWS:        usize = 200;
 
 /// Writer framebuffer - gère un curseur texte et dessine avec la police bitmap.
+// align(16) + text_buf en premier (offset 0) : clear_screen() fait memset de 20 Ko
+// que LLVM vectorise avec MOVAPS. Sans align(16), text_buf a offset 24 = 8 mod 16 -> #GP Linux.
+#[repr(C, align(16))]
 pub struct FbWriter {
-    pub row:            u32,                                        // ligne courante (en caractères, aps en pixels)
-    pub col:            u32,                                        // colonne courante
-    pub x_origin:       u32,                                        // pixel X du coin haut-gauche de la zone d'écriture
-    pub y_origin:       u32,                                        // pixel Y du coin haut-gauche de la zone d'écriture
-    pub max_cols:       u32,                                        // nombre max de colonnes
-    pub max_rows:       u32,                                        // nombre max de lignes
-    pub text_buf:       [[u8; TEXT_MAX_COLS]; TEXT_MAX_ROWS],       // buffer texte max 100 cols x 50 lignes
-    pub bg:             u32,                                        // couleur de fond de la zone d'écriture
-    pub bound_win:      usize,                                      // index fenetre liée (usize::MAX = aucune)
-    pub view_offset:    u32,                                        // décalage de la zone d'écriture (pour le scroll dans les fenêtres)
+    pub text_buf:    [[u8; TEXT_MAX_COLS]; TEXT_MAX_ROWS],  // offset 0 = 16-byte aligne
+    pub row:         u32,
+    pub col:         u32,
+    pub x_origin:    u32,
+    pub y_origin:    u32,
+    pub max_cols:    u32,
+    pub max_rows:    u32,
+    pub bg:          u32,
+    pub bound_win:   usize,
+    pub view_offset: u32,
 }
 
 /// Initialise le framebuffer avec le sinfos du tag Multiboot2.
@@ -84,7 +90,7 @@ pub fn put_pixel(x: u32, y: u32, color: u32) {
     unsafe {
         let w = *addr_of!(FB_WIDTH);
         if x >= w || y >= *addr_of!(FB_HEIGHT) { return; }
-        BACK_BUF[(y * w + x) as usize] = color;
+        BACK_BUF.0[(y * w + x) as usize] = color;
     }
 }
 
@@ -107,7 +113,7 @@ pub fn get_pixel(x: u32, y: u32) -> u32 {
         let w = *addr_of!(FB_WIDTH);
         let h = *addr_of!(FB_HEIGHT);
         if x >= w || y >= h { return 0; }
-        BACK_BUF[(y * w + x) as usize]
+        BACK_BUF.0[(y * w + x) as usize]
     }
 }
 
@@ -132,7 +138,7 @@ pub fn swap_buffers() {
 
         let mut y = y1;
         while y < y2 {
-            let src = addr_of!(BACK_BUF).cast::<u32>().add(y * w + x1);
+            let src = addr_of!(BACK_BUF.0).cast::<u32>().add(y * w + x1);
             let dst = addr.add(y * pitch / 4 + x1);
             core::ptr::copy_nonoverlapping(src, dst, copy_w);
             y += 1;
@@ -167,7 +173,7 @@ pub fn clear(color: u32) {
         mark_dirty(0, 0, w as u32, h as u32);
         let mut i = 0;
         while i < w * h {
-            BACK_BUF[i] = color;
+            BACK_BUF.0[i] = color;
             i += 1;
         }
     }
@@ -270,7 +276,7 @@ impl FbWriter {
             while y < y0 + zone_h {
                 let mut x: usize = x0;
                 while x < x0 + zone_w {
-                    BACK_BUF[(y - 16) * sw + x] = BACK_BUF[y * sw + x];
+                    BACK_BUF.0[(y - 16) * sw + x] = BACK_BUF.0[y * sw + x];
                     x += 1;
                 }
                 y += 1;
