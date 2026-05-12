@@ -1,0 +1,2 @@
+cargo:rustc-link-search=C:\Users\erwin\Dev\OS\user\hello
+cargo:rerun-if-changed=linker.ld

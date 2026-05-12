@@ -30,16 +30,19 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 | GDT + TSS complète | Segments kernel + user |
 | Debug amélioré | Port 0xE9, exceptions GPF/PF avec RIP/CR2, panic handler |
 | Ring 3 userspace | spawn_ring3, iretq, "Hello ring 3!" |
+| ELF loader | `src/elf.rs` — parse PT_LOAD, map_user, copy + zero BSS |
+| paging map_user | bit USER (bit 2) sur tous les niveaux PML4→PT |
+| Crate userspace `user/hello` | `_start` + int 0x80, linké à 0x400000, ELF valide |
 
 ---
 
 ## Phase A — ELF Loader
 > **Priorité absolue.** Sans ça, tout code userspace doit être linké dans le kernel.
 
-- [ ] Parser ELF64 — lire les headers `Elf64_Phdr`, identifier les segments `PT_LOAD`
-- [ ] Allouer des frames user — pour chaque segment : frame allocator → pages U/S mappées
-- [ ] Copier les segments — charger le code/data à leur adresse virtuelle cible
-- [ ] Lancer en ring 3 — `spawn_ring3(elf_entry, user_stack)` avec le bon espace d'adressage
+- [x] Parser ELF64 — lire les headers `Elf64_Phdr`, identifier les segments `PT_LOAD`
+- [x] Allouer des frames user — pour chaque segment : frame allocator → pages U/S mappées
+- [x] Copier les segments — charger le code/data à leur adresse virtuelle cible
+- [ ] Lancer en ring 3 — `include_bytes!` + `elf::load()` + `spawn_ring3()` depuis le shell
 - [ ] Stocker les ELF dans KFS — un fichier KFS = un binaire exécutable
 
 **Milestone :** `run monprog` dans le shell charge et exécute un ELF depuis le disque en ring 3.

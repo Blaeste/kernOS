@@ -1,0 +1,1 @@
+C:\Users\erwin\Dev\OS\user\hello\target\x86_64-unknown-none\debug\hello: C:\Users\erwin\Dev\OS\user\hello\build.rs C:\Users\erwin\Dev\OS\user\hello\linker.ld C:\Users\erwin\Dev\OS\user\hello\src\main.rs
