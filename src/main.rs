@@ -167,6 +167,11 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     // Enregistre le kernel comme tâche 0
     unsafe {
         (*addr_of_mut!(task::scheduler::TASKS))[0].active = true;
+        // Sauvegarde le CR3 du boot — kernel task utilise toujours ce CR3.
+        // Le timer stub le chargera à chaque retour vers la tâche kernel.
+        let boot_cr3 = mem::paging::read_cr3();
+        (*addr_of_mut!(task::scheduler::TASKS))[0].cr3 = boot_cr3;
+        *addr_of_mut!(task::scheduler::NEXT_CR3) = boot_cr3;
     }
 
     // Active les interruptions

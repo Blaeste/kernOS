@@ -123,7 +123,7 @@ const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 ///     - le fichier est trop court ou le magic est absent
 ///     - un Program Header dépasse la taille du fichier
 ///     - frame::alloc() échoue (plus de RAM dispo)
-pub fn load(bytes: &[u8]) -> Option<u64> {
+pub fn load(bytes: &[u8], cr3: u64) -> Option<u64> {
     // ── Validation de base ───────────────────────────────
     // 64 octets minimum pour lire le header complet..
     // le magic 0x7fELF identifie un fichier ELF - sans ça on refuse.
@@ -163,11 +163,11 @@ pub fn load(bytes: &[u8]) -> Option<u64> {
             // Si la page est déjà mappée (autre segment sur la même page),
             // on réutilise le frame existant au lieu d'en allouer un nouveau.
             let vpage = (vaddr as usize + done) & !0xFFF;
-            let frame_phys = match paging::translate(vpage as u64) {
+            let frame_phys = match paging::translate_in(cr3, vpage as u64) {
                 Some(phys) => phys & !0xFFF,
                 None => {
                     let f = frame::alloc()?;
-                    paging::map_user(vpage as u64, f);
+                    paging::map_user_at(cr3, vpage as u64, f);
                     f
                 }
             };

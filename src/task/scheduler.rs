@@ -19,6 +19,7 @@ pub struct Task {
     pub stack:  [u8; STACK_SIZE],  // La pile (en premier → offset 0, alignée 16)
     pub rsp:    u64,               // pointeur de pile sauvegardé
     pub active: bool,
+    pub cr3:    u64,
 }
 
 /// Tableau de toutes les tâches (slots fixes)
@@ -26,7 +27,12 @@ pub static mut TASKS: [Task; MAX_TASKS] = [const { Task {
     stack:  [0; STACK_SIZE],
     rsp:    0,
     active: false,
+    cr3:    0,
 } }; MAX_TASKS];
+
+/// CR3 à charger lors du prochain context switch - écrit par schedule(),
+/// lu par irq_timer_stub en assembleur.
+pub static mut NEXT_CR3: u64 = 0;
 
 /// Index de la tâche en cours d'exécution
 pub static mut CURRENT: usize = 0;
@@ -77,7 +83,7 @@ pub fn spawn(entry: fn()) {
 }
 
 /// Spawn user ring3
-pub fn spawn_ring3(entry: u64, user_stack: u64) {
+pub fn spawn_ring3(entry: u64, user_stack: u64, cr3: u64) {
     unsafe {
         let slot = {
             let tasks = &mut *addr_of_mut!(TASKS);
@@ -94,8 +100,13 @@ pub fn spawn_ring3(entry: u64, user_stack: u64) {
         let tasks = &mut *addr_of_mut!(TASKS);
         let task = &mut tasks[slot];
 
-        // Frame iretq poru ring3 (5 valeurs) + 15 registres = 20 valeurs
-        let ptr = (user_stack - 160) as *mut u64;
+        // Frame iretq écrit sur la pile KERNEL du slot (pas sur user_stack).
+        // user_stack n'est que la valeur RSP stockée dans l'entrée iretq[18] :
+        // iretq la chargera dans RSP au moment du saut en ring 3.
+        // Ecrire sur al pile kernel (identité mappée) écite d'accèder à
+        // une adresse virtuelle user qui n'est pas encore dans le CR3 courant.
+        let kstack_top = task.stack.as_mut_ptr().add(STACK_SIZE) as u64;
+        let ptr = (kstack_top - 160) as *mut u64;
         let mut j = 0;
         while j < 15 { ptr.add(j).write(0); j += 1; }
         ptr.add(15).write(entry);
@@ -104,7 +115,8 @@ pub fn spawn_ring3(entry: u64, user_stack: u64) {
         ptr.add(18).write(user_stack);
         ptr.add(19).write(crate::gdt::USER_DATA as u64);
 
-        task.rsp = user_stack - 160;
+        task.rsp    = kstack_top - 160;
+        task.cr3    = cr3;
         task.active = true;
     }
 }
@@ -130,6 +142,8 @@ pub fn schedule(old_rsp: u64) -> u64 {
 
         // Met à jour l'index courant et retourne le RSP de la prochaine tâche
         *addr_of_mut!(CURRENT) = next;
+        // Informe le stub quel CR3 charger lors du switch
+        *addr_of_mut!(NEXT_CR3) = (*addr_of!(TASKS))[next].cr3;
         (*addr_of!(TASKS))[next].rsp
     }
 }

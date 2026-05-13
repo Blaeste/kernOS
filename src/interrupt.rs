@@ -270,6 +270,12 @@ pub unsafe extern "C" fn irq_timer_stub() {
         "call {f}",
 		"mov rsp, rax",
 
+		// Charge le CR3 de la prochaine tâche - écrit apr schedule() dans NEXT_CR3.
+		// Flush TLB implicite : chaque switch charge le CR3 même si identique.
+		// Sûr ici : kernel stack (RSP) et kernel code sont mappés dans tous les CR3.
+		"mov rax, [{nc}]",
+		"mov cr3, rax",
+
 		// Restaure les 15 registres depuis la pile de la NOUVELLE tâche
         "pop r15","pop r14","pop r13","pop r12",
         "pop r11","pop r10","pop r9","pop r8",
@@ -277,6 +283,7 @@ pub unsafe extern "C" fn irq_timer_stub() {
         "pop rcx","pop rbx","pop rax",
         "iretq",
         f = sym irq_timer_inner,
+		nc = sym crate::task::scheduler::NEXT_CR3,
     );
 }
 

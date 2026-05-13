@@ -105,7 +105,7 @@ const ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
 ///
 /// `mov {}, cr3` → copie la valeur de CR3 dans un registre général.
 /// `out(reg) cr3` → Rust met le résultat dans la variable `cr3`.
-fn read_cr3() -> u64 {
+pub fn read_cr3() -> u64 {
     let cr3: u64;
     unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack)); }
     cr3
@@ -371,5 +371,157 @@ pub fn translate(virt: u64) -> Option<u64> {
 
     // Page 4 Ko normale : adresse de base + offset 12 bits
     // 0xFFF = 12 bits d'offset (position dans la page de 4 Ko)
+    Some((pt[i1] & ADDR_MASK) + (virt & 0xFFF))
+}
+
+/*
+    ══════════════════════════════════════════════════════════
+    ISOLATION MÉMOIRE — CR3 par processus (Phase B)
+    ══════════════════════════════════════════════════════════
+
+    PROBLÈME SANS CR3 PAR PROCESSUS
+    ─────────────────────────────────
+    Au boot, boot.asm crée UNE seule PML4 partagée par tout le monde.
+    Deux processus à l'adresse 0x400000 écrivent dans la même RAM physique.
+    Un process crashé peut corrompre le kernel ou l'autre process.
+
+    SOLUTION : CLONER LA PML4
+    ─────────────────────────
+    Chaque processus user obtient sa propre PML4 via new_cr3().
+    On clone uniquement les tables d'index (PML4, PDPT, PD) pour
+    isoler la zone user, en partageant les entrées kernel.
+
+    STRUCTURE DU CLONE
+    ──────────────────
+    La disposition mémoire du boot (dans PML4[0]) :
+
+      PML4[0] → PDPT
+        PDPT[0] → PD (4 tables P2 de 512 huge pages 2 Mo)
+          PD[0] = huge 2 Mo (0x000000–0x1FFFFF) : kernel code/stack
+          PD[1] = huge 2 Mo (0x200000–0x3FFFFF) : kernel data/heap
+          PD[2] = huge 2 Mo (0x400000–0x5FFFFF) : zone user (ELF + pile)
+          PD[3..] = huge pages supplémentaires
+        PDPT[1..3] → PD supérieures (framebuffer, etc.)
+
+    Pour isoler la zone user on crée par processus :
+      - une PD propre : PD[0..2] = copies des huge pages kernel,
+                        PD[2..511] = vide (map_user_at y crée des PTs)
+      - un PDPT propre : PDPT[0] = PD propre, PDPT[1..511] = partagé
+      - une PML4 propre : PML4[0] = PDPT propre, PML4[1..511] = partagé
+
+    Résultat :
+      - kernel toujours accessible (PD[0,1] = mêmes huge pages) ✓
+      - zone user (PD[2..511]) indépendante par processus ✓
+      - framebuffer partagé via PDPT[1..3] ✓
+*/
+
+/// Crée un espace d'adressage isolé pour un processus user.
+///
+/// Alloue 2 frames (PML4 + PDPT propres).
+///
+/// Stratégie d'isolation :
+///   PDPT[0] partagé direct = identity map 0-1 Go (tout le kernel).
+///     Le kernel dépasse souvent 4 Mo (ex: framebuffer 1080p ≈ 8 Mo de
+///     buffers statiques) — partager PDPT[0] en entier évite de devoir
+///     deviner jusqu'où s'étend le BSS.
+///   PDPT[1] vide = zone user isolée (1 Go - 2 Go).
+///     Chaque processus y mappe son ELF et sa pile via map_user_at().
+///     Deux processus au même vaddr (0x40000000) ont des frames distincts.
+///   PDPT[2..511] partagés (framebuffer PCI, RAM >1 Go, etc.)
+///
+/// Retourne l'adresse physique de la nouvelle PML4 (= valeur à charger dans CR3).
+pub fn new_cr3() -> u64 {
+    let kernel_pml4 = table_at(read_cr3() & ADDR_MASK);
+    let kernel_pdpt = table_at(kernel_pml4[0] & ADDR_MASK);
+
+    // ── PDPT propre ──────────────────────────────────────────
+    let pdpt_phys = frame::alloc().expect("new_cr3: plus de frames");
+    zero_frame(pdpt_phys);
+    let new_pdpt = table_at(pdpt_phys);
+    new_pdpt[0] = kernel_pdpt[0];   // 0-1 Go : kernel entier (code/BSS/heap)
+    // new_pdpt[1] = 0 : zone user propre (1-2 Go), créée par map_user_at
+    for i in 2..512usize {
+        new_pdpt[i] = kernel_pdpt[i];
+    }
+
+    // ── PML4 propre ──────────────────────────────────────────
+    let pml4_phys = frame::alloc().expect("new_cr3: plus de frames");
+    zero_frame(pml4_phys);
+    let new_pml4 = table_at(pml4_phys);
+    new_pml4[0] = pdpt_phys | PRESENT | WRITABLE | USER;
+    for i in 1..512usize {
+        new_pml4[i] = kernel_pml4[i];
+    }
+
+    pml4_phys
+}
+
+/// Mappe une page user dans un espace d'adressage donné (CR3 explicite).
+///
+/// Identique à map_user() mais opère sur 'cr3' au lieu du CR3 courant.
+/// A utiliser lors du chargement d'un ELF avant que le processus ne soit
+/// shedulé - le CR3 coble n'est pas encore actif, invlg inutile.
+pub fn map_user_at(cr3: u64, virt: u64, phys: u64) {
+
+    let pml4 =  table_at(cr3 & ADDR_MASK);
+
+    let i4 = ((virt >> 39) & 0x1FF) as usize;
+    let i3 = ((virt >> 30) & 0x1FF) as usize;
+    let i2 = ((virt >> 21) & 0x1FF) as usize;
+    let i1 = ((virt >> 12) & 0x1FF) as usize;
+
+    if pml4[i4] & PRESENT == 0 {
+        let f = frame::alloc().expect("paging: plus de frames");
+        zero_frame(f);
+        pml4[i4] = f | PRESENT | WRITABLE | USER;
+    } else { pml4[i4] |= USER; }
+    let pdpt = table_at(pml4[i4] & ADDR_MASK);
+
+    if pdpt[i3] & PRESENT == 0 {
+        let f = frame::alloc().expect("paging: plus de frames");
+        zero_frame(f);
+        pdpt[i3] = f | PRESENT | WRITABLE | USER;
+    } else { pdpt[i3] |= USER; }
+    let pd = table_at(pdpt[i3] & ADDR_MASK);
+
+    if pd[i2] & HUGE_PAGE != 0 { return; }
+    if pd[i2] & PRESENT == 0 {
+        let f = frame::alloc().expect("paging: plus de frames");
+        zero_frame(f);
+        pd[i2] = f | PRESENT | WRITABLE | USER;
+    } else { pd[i2] |= USER; }
+    let pt = table_at(pd[i2] & ADDR_MASK);
+
+    pt[i1] = phys | PRESENT | WRITABLE | USER;
+}
+
+/// Traduit un adresse virtuelle dans un espace d'adressage donnée (CR3 explicite).
+///
+/// Identique à translate() masis ur un CR3 spécifique - utile pour verifier
+/// si une page est déjà mappée dans le CR3 d'un processus pas encore actif.
+pub fn translate_in(cr3: u64, virt: u64) -> Option<u64> {
+    let pml4 = table_at(cr3 & ADDR_MASK);
+
+    let i4 = ((virt >> 39) & 0x1FF) as usize;
+    if pml4[i4] & PRESENT == 0 { return None; }
+    let pdpt = table_at(pml4[i4] & ADDR_MASK);
+
+    let i3 = ((virt >> 30) & 0x1FF) as usize;
+    if pdpt[i3] & PRESENT == 0 { return None; }
+    if pdpt[i3] & HUGE_PAGE != 0 {
+        return Some((pdpt[i3] & ADDR_MASK) + (virt & 0x3FFF_FFFF));
+    }
+
+    let pd = table_at(pdpt[i3] & ADDR_MASK);
+    let i2 = ((virt >> 21) & 0x1FF) as usize;
+    if pd[i2] & PRESENT == 0 { return None; }
+    if pd[i2] & HUGE_PAGE != 0 {
+        return Some((pd[i2] & ADDR_MASK) + (virt & 0x1F_FFFF));
+    }
+
+    let pt = table_at(pd[i2] & ADDR_MASK);
+    let i1 = ((virt >> 12) & 0x1FF) as usize;
+    if pt[i1] & PRESENT == 0 { return None; }
+
     Some((pt[i1] & ADDR_MASK) + (virt & 0xFFF))
 }

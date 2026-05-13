@@ -49,13 +49,14 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 
 ---
 
-## Phase B — Isolation mémoire
+## Phase B — Isolation mémoire ✅
 > Actuellement tous les processus partagent le même CR3 — catastrophique pour la stabilité.
 
-- [ ] CR3 par processus — chaque `Task` a sa propre `PML4` (clone du kernel mapping + pages user)
-- [ ] Switch CR3 au context switch — `mov cr3, rax` dans `irq_timer_stub`
-- [ ] Libération à task_exit — free pages user + PML4 au décès du processus
-- [ ] Tester l'isolation — deux processus avec mêmes adresses virtuelles, données différentes
+- [x] CR3 par processus — `Task.cr3` + `paging::new_cr3()` — PDPT[0] partagé (kernel 0-1 Go), PDPT[1] isolé (user 1-2 Go)
+- [x] Switch CR3 au context switch — `mov cr3, [{nc}]` dans `irq_timer_stub`, `NEXT_CR3` écrit par `schedule()`
+- [x] ELF user relogé à 0x40000000 (1 Go) — hors de la zone kernel, isolation réelle
+- [ ] Libération à task_exit — free pages user + PML4 (Phase D, nécessite walk PT)
+- [x] Tester l'isolation — `run` charge l'ELF dans son CR3 propre, kernel CR3 intact ✅
 
 **Milestone :** un process crashé ne corrompt pas les autres.
 
