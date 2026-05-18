@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Compile user/hello ELF avant le kernel (requis par include_bytes!)
+(cd user/hello && cargo build)
+
 cargo build
 cp target/x86_64-unknown-none/debug/kernos target/isodir/boot/kernos
 if [ ! -f target/disk.img ]; then
