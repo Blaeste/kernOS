@@ -350,6 +350,10 @@ pub unsafe extern "C" fn syscall_stub() {
 		"mov rsi, rdi",
 		"mov rdi, rax",
         "call {f}",
+		// Ecrase le slot rex sauvegardé (RSP+112 = 14eme u64 depuis RSP)
+		// avec la valeur de retour du syscall - sinon pop rax restaurerait
+		// le numéro syscall original au lieu du résultat.
+		"mov qword ptr [rsp + 112], rax",
         "pop r15","pop r14","pop r13","pop r12",
         "pop r11","pop r10","pop r9","pop r8",
         "pop rbp","pop rdi","pop rsi","pop rdx",

@@ -62,17 +62,19 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 
 ---
 
-## Phase C — Syscalls complets
+## Phase C — Syscalls complets ✅
 > Aujourd'hui : 2 syscalls. Il en faut ~10 pour qu'un programme soit utile.
 
-- [ ] `read(fd, buf, len)` — lire stdin (clavier)
-- [ ] `open(path)` → fd — ouvrir un fichier KFS
-- [ ] `close(fd)` — fermer un fd
-- [ ] `read_file(fd, buf, len)` — lire depuis KFS
-- [ ] `write_file(fd, buf, len)` — écrire dans KFS
-- [ ] `exec(path)` — remplacer le processus par un ELF
-- [ ] `getpid()` — identifiant de processus
-- [ ] `yield()` — céder le CPU volontairement
+- [x] `getpid()` — retourne l'index de la tâche courante
+- [x] `yield()` — cède le CPU, reprise correcte après reschedule
+- [x] `open(path)` → fd — ouvre un fichier KFS, réserve slot fd 3..7
+- [x] `close(fd)` — libère le slot fd
+- [x] `read(fd, buf, len)` — lit depuis KFS avec position courante (fd.pos)
+- [x] Fix syscall_stub — `mov [rsp+112], rax` préserve la valeur de retour
+- [x] fd table dans Task — `[FileDesc; 8]` (name + pos par fichier ouvert)
+- [x] user/hello teste tous les syscalls — write/pid/yield/open/read/close ✅
+- [ ] `read(0, buf, len)` stdin — bloquant, nécessite Phase F (IPC)
+- [ ] `exec(path)` — remplace le processus par un ELF (Phase D/E)
 - [ ] `sleep(ms)` — attente temporisée
 
 **Milestone :** un programme userspace peut lire/écrire des fichiers sans accès kernel direct.

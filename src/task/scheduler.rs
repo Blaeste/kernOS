@@ -8,6 +8,19 @@ const STACK_SIZE:   usize = 8192;
 /// Nombre max de tâches simultanées
 pub const MAX_TASKS:    usize = 8;
 
+/// Nombre max de fichiers ouverts par tâche (0=stdin, 1=stdout, 2=stderr, 3..7=KFS)
+pub const MAX_FDS:      usize = 8;
+
+/// Entrée de la table des descipteurs de fichiers d'une tâche.
+/// fd 0/1/2 sont réservés (stdin/stdout/stderr) et ne sont pas dans ce tableau
+/// ils0 sont gérés directement par les handlers syscall
+/// fd 3..7 pointent vers des fichiers KFS ouverts.
+pub struct FileDesc {
+    pub active:     bool,
+    pub name:       [u8; 28],   // nom KFS (NAME_MAX = 28)
+    pub pos:        usize,      // position de lecture courante
+}
+
 /// Une tâche = une pile + un pointeur de pile sauvegardé
 /// Quand on switch de tâche, on sauvegarde RSP (Register Stack Pointer) ici
 /// et on restaure le RSP de la prochaine tâche.
@@ -20,6 +33,7 @@ pub struct Task {
     pub rsp:    u64,               // pointeur de pile sauvegardé
     pub active: bool,
     pub cr3:    u64,
+    pub fds:    [FileDesc; MAX_FDS],
 }
 
 /// Tableau de toutes les tâches (slots fixes)
@@ -28,6 +42,7 @@ pub static mut TASKS: [Task; MAX_TASKS] = [const { Task {
     rsp:    0,
     active: false,
     cr3:    0,
+    fds:    [const { FileDesc { active: false, name: [0; 28], pos: 0 } }; MAX_FDS],
 } }; MAX_TASKS];
 
 /// CR3 à charger lors du prochain context switch - écrit par schedule(),
