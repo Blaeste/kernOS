@@ -81,14 +81,16 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 
 ---
 
-## Phase D — KFS v2
+## Phase D — KFS v2 ✅
 > KFS v1 est trop limité pour accueillir des programmes (8 fichiers × 512 octets).
 
-- [ ] Taille variable — fichiers multi-secteurs avec liste chaînée de blocs
-- [ ] Plus de fichiers — passer à 64+ entrées (index bitmap)
-- [ ] Sous-dossiers — entrées de type `DIR` avec listing récursif
-- [ ] Métadonnées — timestamp, permissions rwx basiques
-- [ ] Cache secteurs — éviter de relire ATA à chaque accès
+- [x] Taille variable — FAT chaînée (128 blocs × 512 o = 64 Ko max par fichier)
+- [x] Plus de fichiers — 64 entrées × 32 octets (4 secteurs de table)
+- [x] `read_at(name, offset, buf)` — lecture positionnée pour syscall read(fd.pos)
+- [x] Auto-reformat au boot si magic/version invalide (migration v1→v2 transparente)
+- [x] Testé : kfsWrite / kfsLs / kfsRead / run open+read depuis ELF ✅
+- [ ] Sous-dossiers — entrées de type `DIR` (Phase ultérieure)
+- [ ] Cache secteurs — éviter de relire ATA à chaque accès (Phase ultérieure)
 
 **Milestone :** `kfsLs /bin` affiche les exécutables, fichiers > 512 octets lisibles.
 

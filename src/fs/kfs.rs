@@ -1,38 +1,84 @@
-/// KernOS File System - filesystem persiste sur disque ATA
+/*
+    ══════════════════════════════════════════════════════════
+    KFS v2 — KernOS File System, version 2
+    ══════════════════════════════════════════════════════════
+
+    LIMITES DE KFS v1
+    ─────────────────
+    v1 stockait chaque fichier dans UN secteur fixe (512 octets max, 8 fichiers).
+    v2 introduit une liste chaînée de blocs (FAT) pour des fichiers de taille
+    variable, et une table de 64 entrées pour plus de fichiers simultanés.
+
+    LAYOUT DISQUE
+    ─────────────
+    ┌─────────────┬────────────────────────────────────────────┐
+    │ Secteur 0   │ Superbloc (magic, version)                 │
+    │ Secteurs 1-4│ Table fichiers : 64 entrées × 32 octets    │
+    │             │   16 entrées par secteur → 4 secteurs      │
+    │ Secteur 5   │ FAT : 128 u32 (liste chaînée de blocs)     │
+    │ Secteurs 6+ │ Blocs de données : 128 × 512 = 64 Ko       │
+    └─────────────┴────────────────────────────────────────────┘
+
+    LISTE CHAÎNÉE (FAT)
+    ───────────────────
+    FAT[i] == FAT_FREE (0)       → bloc i libre
+    FAT[i] == FAT_END  (0xFFF…)  → bloc i = dernier de la chaîne
+    FAT[i] == j                  → bloc i suivant = bloc j
+
+    Exemple : fichier de 1200 octets → 3 blocs
+      FileEntry.first = 2
+      FAT[2] = 7  → FAT[7] = 11  → FAT[11] = FAT_END
+
+    ENTRÉE FICHIER (32 octets)
+    ──────────────────────────
+      used  : 1 octet  — 0=libre, 1=utilisé
+      name  : 23 octets — nom (sans null terminal obligatoire)
+      size  : 4 octets  — taille en octets
+      first : 4 octets  — index du premier bloc (FAT_END si vide)
+*/
 
 use crate::drivers::ata::{read_sector, write_sector};
 use crate::klib::string::{eq, strlen};
 use crate::klib::mem::memcpy;
 use crate::klib::cmp::min;
 
-// Layout disque :
-// Secteur 0     = superbloc
-// Secteurs 1-8  = table des fichiers (1 entrée par secteur)
-// Secteurs 9+   = données (1 fichier = 1 secteur = 212 octets max)
+// ── Constantes ───────────────────────────────────────────────────────────
 
-const KFS_MAGIC:         u32 = 0x4B465300;   // "KFS\0"
-const MAX_FILES:         usize = 8;
-const DATA_START_LBA:    u32 = 9;
-const NAME_MAX:          usize = 28;         // octets
+const KFS_MAGIC:            u32     = 0x4B465300;       // "KFS\0"
+const KFS_VERSION:          u32     = 2;
+pub const MAX_FILES:        usize   = 64;
+const MAX_BLOCKS:           usize   = 128;
+const FAT_SECTOR:           u32     = 5;
+const DATA_START:           u32     = 6;
+const FAT_FREE:             u32     = 0x0000_0000;
+const FAT_END:              u32     = 0xFFFF_FFFF;
+pub const NAME_MAX:         usize   = 23;
+const ENTRY_SIZE:           usize   = 32;
+const ENTRIES_PER_SECTOR:   usize   = 512 / ENTRY_SIZE; // 16
+
+
+// ── Structures ───────────────────────────────────────────────────────────
 
 /// Superbloc - secteur 0
 #[repr(C)]
-pub struct SuperBlock {
-    pub magic:      u32,
-    pub version:    u32,
-    pub file_count: u32,
-    pub _pad:       [u8; 500],              // remplit 512 octets
+struct SuperBlock {
+    magic:      u32,
+    version:    u32,
+    _pad:       [u8; 504],
 }
 
-/// Entrée de fichier - 1 par secteur (secteur 1-8)
+/// Entrée de fichier - 32 octets exactement (16 par secteur)
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct FileEntry {
     pub used:       u8,
     pub name:       [u8; NAME_MAX],
     pub size:       u32,
-    pub data_lba:   u32,                    // secteur où sont les données
-    pub _pad:       [u8; 475],              // remplit 512 octets
+    pub first:      u32,                // index du premier bloc dans la FAT (FAT_END = pas de données)
 }
+
+
+// ── I/O bas niveau ───────────────────────────────────────────────────────
 
 /// Lit le superbloc depuis le secteur 0
 fn read_superblock() -> SuperBlock {
@@ -48,141 +94,301 @@ fn write_superblock(sb: &SuperBlock) {
     write_sector(0, &buf);
 }
 
-/// Lit une entrée de fichier (idx = 0..7, secteur 1..8)
+/// Lit la FAT entière (1 secteur = 128 u32).
+fn read_fat() -> [u32; MAX_BLOCKS] {
+
+    let mut buf = [0u16; 256];
+
+    read_sector(FAT_SECTOR, &mut buf);
+
+    let bytes = unsafe { core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512) };
+    let mut fat = [0u32; MAX_BLOCKS];
+
+    for i in 0..MAX_BLOCKS {
+
+        fat[i] = u32::from_le_bytes([
+            bytes[i*4], bytes[i*4+1], bytes[i*4+2], bytes[i*4+3],
+        ]);
+    }
+    fat
+}
+
+/// Ecrit la FAT entière.
+fn write_fat(fat: &[u32; MAX_BLOCKS]) {
+
+    let mut buf = [0u16; 256];
+    let bytes = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 512) };
+
+    for i in 0..MAX_BLOCKS {
+
+        let b = fat[i].to_le_bytes();
+
+        bytes[i*4] = b[0];
+        bytes[i*4+1] = b[1];
+        bytes[i*4+2] = b[2];
+        bytes[i*4+3] = b[3];
+    }
+
+    write_sector(FAT_SECTOR, &buf);
+}
+
+/// Lit une entrée fichier (idx 0..63).
+/// Les entrées sont packées 16 par secteur dans les secteurs 1-4.
 fn read_entry(idx: usize) -> FileEntry {
+
+    let sector = 1 + (idx / ENTRIES_PER_SECTOR) as u32;
+    let offset = idx % ENTRIES_PER_SECTOR;
     let mut buf = [0u16; 256];
-    read_sector(1 + idx as u32, &mut buf);
-    unsafe { core::ptr::read(buf.as_ptr() as *const FileEntry) }
+    
+    read_sector(sector, &mut buf);
+
+    let bytes = unsafe { core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512) };
+
+    unsafe { core::ptr::read(bytes.as_ptr().add(offset * ENTRY_SIZE) as *const FileEntry) }
 }
 
-/// Ecrit une entrée de fichier (idx = 0..7, secteur 1..8)
+/// Ecrit une entrée fichier (idx 0..63).
+/// Lit d'abord le secteur entier pour ne pas écraser les autres entrées.
 fn write_entry(idx: usize, entry: &FileEntry) {
+
+    let sector = 1 + (idx / ENTRIES_PER_SECTOR) as u32;
+    let offset = idx % ENTRIES_PER_SECTOR;
     let mut buf = [0u16; 256];
-    unsafe { core::ptr::write(buf.as_mut_ptr() as *mut FileEntry, core::ptr::read(entry)); }
-    write_sector(1 + idx as u32, &buf);
+
+    read_sector(sector, &mut buf);
+
+    let bytes = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 512) };
+
+    unsafe { core::ptr::write(bytes.as_mut_ptr().add(offset * ENTRY_SIZE) as *mut FileEntry, *entry); }
+
+    write_sector(sector, &buf);
 }
 
-/// Initialise le filesystem (à appeler au boot)
-/// Si le magic est absent -> formate le disque
+/// Lit un bloc de données (block_idx 0..127) dans out.
+fn read_block(block_idx: u32, out: &mut [u8; 512]) {
+
+    let mut buf = [0u16; 256];
+
+    read_sector(DATA_START + block_idx, &mut buf);
+
+    let bytes = unsafe { core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512) };
+    
+    out.copy_from_slice(bytes);
+}
+
+/// Ecrit un bloc de données.
+fn write_block(block_idx: u32, data: &[u8]) {
+
+    let mut buf = [0u16; 256];
+    let bytes = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 512) };
+    let len = min(data.len(), 512);
+
+    memcpy(bytes, data, len);
+
+    write_sector(DATA_START + block_idx, &buf);
+}
+
+
+// ── API publique ─────────────────────────────────────────────────────────
+
+/// Initialise KFS au boot. Formate si le magic ou la version est invalide.
 pub fn init() {
     let sb = read_superblock();
-    if sb.magic != KFS_MAGIC {
-        // Premier boot : formate
-        let new_sb = SuperBlock {
-            magic: KFS_MAGIC,
-            version: 1,
-            file_count: 0,
-            _pad: [0; 500],
-        };
-        write_superblock(&new_sb);
-        // Efface les 8 entrées
-        let mut i = 0;
-        while i < MAX_FILES {
-            let entry = FileEntry {
-                used: 0,
-                name: [0; NAME_MAX],
-                size: 0,
-                data_lba: 0,
-                _pad: [0; 475],
-            };
-            write_entry(i, &entry);
-            i += 1;
+    if sb.magic != KFS_MAGIC || sb.version != KFS_VERSION {
+
+        write_superblock(&SuperBlock { magic: KFS_MAGIC, version: KFS_VERSION, _pad: [0; 504] });
+
+        // FAT : tous les bloc libres
+        write_fat(&[FAT_FREE; MAX_BLOCKS]);
+
+        // Table des fichiers : toutes les entrées vides
+        for i in 0..MAX_FILES {
+
+            write_entry(i, &FileEntry { used: 0, name: [0; NAME_MAX], size: 0, first: FAT_END });
         }
     }
 }
 
-/// Crée un fichier sur le disque
+/// Crée ou écrase un fichier. Retourne false si plus de slots ou de blocs.
 pub fn create(name: &[u8], data: &[u8]) -> bool {
-    let mut i = 0;
-    while i < MAX_FILES {
-        let entry = read_entry(i);
-        if entry.used == 0 {
-            // Slot libre trouvé
-            let mut new_entry = FileEntry {
-                used: 1,
-                name: [0; NAME_MAX],
-                size: data.len() as u32,
-                data_lba: DATA_START_LBA + i as u32,
-                _pad: [0; 475],
-            };
-            // Copie le nom
-            let len = min(name.len(), NAME_MAX);
-            memcpy(&mut new_entry.name, name, len);
-            write_entry(i, &new_entry);
-            // Ecrit les données
-            let mut buf = [0u16; 256];
-            let bytes = unsafe {
-                core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut u8, 512)
-            };
-            let dlen = min(data.len(), 512);
-            memcpy(bytes, data, dlen);
-            write_sector(DATA_START_LBA + i as u32, &buf);
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
 
-/// Liste les fichiers
-pub fn list(mut cb: impl FnMut(&[u8], u32)) {
-    let mut i = 0;
-    while i < MAX_FILES {
-        let entry = read_entry(i);
-        if entry.used == 1 {
-            let len = strlen(&entry.name);
-            cb(&entry.name[..len], entry.size);
-        }
-        i += 1;
-    }
-}
+    // Cherche un slot libre (ou le slot existant du même nom pour l'écraser)
+    let mut slot = MAX_FILES;
 
-/// Lit le contenu d'un fichier
-pub fn read(name: &[u8], out: &mut [u8; 512]) -> usize {
-    let mut i = 0;
-    while i < MAX_FILES {
-        let entry = read_entry(i);
-        if entry.used == 1 {
-            let len = strlen(&entry.name);
-            if eq(&entry.name[..len], name) {
-                let mut buf = [0u16; 256];
-                read_sector(entry.data_lba, &mut buf);
-                let bytes = unsafe {
-                    core::slice::from_raw_parts(buf.as_ptr() as *const u8, 512)
-                };
-                let sz = entry.size as usize;
-                let copy_len = min(sz, 512);
-                memcpy(out, bytes, copy_len);
-                return sz;
+    for i in 0..MAX_FILES {
+
+        let e = read_entry(i);
+
+        if e.used == 0 && slot == MAX_FILES { slot = i; }
+
+        if e.used == 1 {
+
+            let nlen = strlen(&e.name);
+
+            if eq(&e.name[..nlen], name) {
+
+                // Fichier existant: libère ses blocs avant d'écraser
+                let mut fat = read_fat();
+                let mut blk = e.first;
+
+                while blk != FAT_END && blk < MAX_BLOCKS as u32 {
+
+                    let next = fat[blk as usize];
+                    
+                    fat[blk as usize] = FAT_FREE;
+                    blk = next;
+                }
+
+                write_fat(&fat);
+                slot = i;
+                break;
             }
         }
-        i += 1;
+    }
+
+    if slot == MAX_FILES { return false; }
+
+    // Alloue les blocs nécessaires dans la FAT
+    let mut fat = read_fat();
+    let blocks_needed = (data.len() + 511) / 512;
+    let mut chain: [u32; MAX_BLOCKS] = [FAT_END; MAX_BLOCKS];
+    let mut found = 0usize;
+    let mut bi = 0usize;
+
+    while bi < MAX_BLOCKS && found < blocks_needed {
+
+        if fat[bi] == FAT_FREE {
+
+            chain[found] = bi as u32;
+            found += 1;
+        }
+        bi += 1;
+    }
+
+    if found < blocks_needed { return false; }
+
+    // Chaine les blocs dans la FAT
+    for i in 0..found {
+
+        fat[chain[i] as usize] = if i + 1 < found { chain[i + 1] } else { FAT_END };
+    }
+    write_fat(&fat);
+
+    // Ecrit les données bloc par bloc
+    for i in 0..found {
+
+        let offset = i * 512;
+        let slice = if offset < data.len() { &data[offset..min(data.len(), offset + 512)] } else { &[] };
+
+        write_block(chain[i], slice);
+    } 
+
+    // Ecrit l'entrée fichier
+    let mut entry = FileEntry { used: 1, name: [0; NAME_MAX], size: data.len() as u32, first: if found > 0 { chain[0] } else { FAT_END } };
+    let nlen = min(name.len(), NAME_MAX);
+
+    memcpy(&mut entry.name, name, nlen);
+    write_entry(slot, &entry);
+    true
+}
+
+/// Lit jusqu'a out.len() octets depuis le début du fichier.
+/// Retourne le nombre d'octets copiés (0 = introuvable)
+pub fn read(name: &[u8], out: &mut [u8]) -> usize {
+    read_at(name, 0, out)
+}   
+
+/// lit jusqu'a out.len() octets à aprtir de l'offset donnée.
+/// Retourne le nombre d'octets copiés (0 = introuvable ou hors du fichier)
+pub fn read_at(name: &[u8], offset: usize, out: &mut [u8]) -> usize {
+
+    for i in 0..MAX_FILES {
+
+        let e  = read_entry(i);
+        if e.used != 1 { continue; }
+
+        let nlen = strlen(&e.name);
+        if !eq(&e.name[..nlen], name) { continue; }
+
+        let file_size = e.size as usize;
+        if offset >= file_size { return 0; }
+
+        let to_read = min(out.len(), file_size - offset);
+        let fat = read_fat();
+
+        // Avance dans la chaine jusqu'au bloc contenant offset
+        let start_block = offset / 512;
+        let start_off   = offset % 512;
+        let mut blk = e.first;
+
+        for _ in 0..start_block {
+
+            if blk == FAT_END || blk >= MAX_BLOCKS as u32 { return 0; }
+
+            blk = fat[blk as usize];
+        }
+
+        // Copie les données bloc par bloc
+        let mut copied = 0usize;
+        let mut in_block_off = start_off;
+
+        while copied < to_read && blk != FAT_END && blk < MAX_BLOCKS as u32 {
+
+            let mut block = [0u8; 512];
+            read_block(blk, &mut block);
+
+            let available = min(512 - in_block_off, to_read - copied);
+            memcpy(&mut out[copied..], &block[in_block_off..], available);
+            copied += available;
+            in_block_off = 0;
+            blk = fat[blk as usize];
+        }
+        return copied;
     }
     0
 }
 
-/// Supprime un fichier du disque
+/// Liste les fichiers (nom, taille) via callback.
+pub fn list(mut cb: impl FnMut(&[u8], u32)) {
+    
+    for i in 0..MAX_FILES {
+
+        let e = read_entry(i);
+        if e.used == 1 {
+
+            let nlen = strlen(&e.name);
+            cb(&e.name[..nlen], e.size);
+        }
+    }
+}
+
+/// Supprime un fichier et libère ses blocs dans la FAT.
 /// Retoune true si trouve et supprime, false si introuvable
 pub fn delete(name: &[u8]) -> bool {
-    let mut i = 0;
-    while i < MAX_FILES {
-        let entry = read_entry(i);
-        if entry.used == 1 {
-            let len = strlen(&entry.name);
-            if eq(&entry.name[..len], name) {
-                // Ecrase le slot avec une entree vide
-                let empty = FileEntry {
-                    used: 0,
-                    name: [0; NAME_MAX],
-                    size: 0,
-                    data_lba: 0,
-                    _pad: [0; 475],
-                };
-                write_entry(i, &empty);
-                return true;
-            }
+    
+    for i in 0..MAX_FILES {
+
+        let e = read_entry(i);
+        if e.used != 1 { continue; }
+
+        let nlen = strlen(&e.name);
+        if !eq(&e.name[..nlen], name) { continue; }
+
+        // Libère la chaine de blocs
+        let mut fat = read_fat();
+        let mut blk = e.first;
+
+        while blk != FAT_END && blk < MAX_BLOCKS as u32 {
+
+            let next = fat[blk as usize];
+            fat[blk as usize] = FAT_FREE;
+            blk = next;
         }
-        i += 1;
+        write_fat(&fat);
+
+        // Efface l'entée
+        write_entry(i, &FileEntry { used: 0, name: [0; NAME_MAX], size:0, first: FAT_END });
+        return true;
     }
     false
 }

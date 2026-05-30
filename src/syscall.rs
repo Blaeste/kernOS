@@ -143,11 +143,11 @@ fn sys_read(fd: u64, buf_ptr: u64, len: u64) -> u64 {
         return u64::MAX;
     }
 
-    // Trim les zéros trailing du nom stocké — kfs::read fait une comparaison exacte
+    // Trim les zéros trailing du nom stocké — kfs::read_at fait une comparaison exacte
     let name_len = name.iter().position(|&b| b == 0).unwrap_or(28);
 
     let mut kbuf = [0u8; 512];
-    let file_size = crate::fs::kfs::read(&name[..name_len], &mut kbuf);
+    let file_size = crate::fs::kfs::read_at(&name[..name_len], pos, &mut kbuf);
     if file_size == 0 || pos >= file_size { return 0; }
 
     let available = file_size - pos;
