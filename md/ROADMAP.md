@@ -1,9 +1,8 @@
 # KernOS — Roadmap
 
-## État actuel — Ring 3 fonctionnel
+## État actuel — Phases A→D complètes
 
-Le kernel est mature. Le premier code userspace tourne en ring 3 via `iretq` + `int 0x80`.
-Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
+Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, filesystem multi-blocs.
 
 ### Fait ✅
 
@@ -13,30 +12,28 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 | VGA + print!/println! | Affichage texte kernel |
 | IDT + PIC + IRQ | Interruptions CPU complètes |
 | Clavier PS/2 (AZERTY/QWERTY) + Souris | Input complet |
-| Shell interactif | Parsing commandes, historique |
+| Shell interactif | Parsing commandes |
 | Free List allocator 256 Ko | alloc + free + fusion |
 | Timer PIT 100 Hz | Base temps kernel |
 | Frame allocator bitmap | Gestion physique de la RAM |
-| Pagination 4 niveaux | map / unmap / translate |
+| Pagination 4 niveaux | map / unmap / translate / map_user_at |
 | Multitâche préemptif | Round-robin, context switch, spawn |
-| Framebuffer 800×600 | Double buffering, dirty rect |
-| Window manager | Drag & drop, z-order, focus, fermeture |
+| Framebuffer 1080p | Double buffering, dirty rect |
+| Window manager | Drag & drop, z-order, focus |
 | Taskbar + horloge | UI desktop basique |
 | Driver ATA | Lecture/écriture disque |
-| KFS v1 | 8 fichiers × 512 octets, persisté sur disque |
-| Scroll terminal | PgUp/PgDn, historique |
+| KFS v2 | 64 fichiers, FAT chaînée, 64 Ko max, read_at |
 | SpinLock | Protection accès concurrent |
-| Syscalls (int 0x80) | write + exit |
 | GDT + TSS complète | Segments kernel + user |
-| Debug amélioré | Port 0xE9, exceptions GPF/PF avec RIP/CR2, panic handler |
-| Ring 3 userspace | spawn_ring3, iretq, "Hello ring 3!" |
-| ELF loader | `src/elf.rs` — parse PT_LOAD, map_user, copy + zero BSS |
-| paging map_user | bit USER (bit 2) sur tous les niveaux PML4→PT |
-| Crate userspace `user/hello` | `_start` + int 0x80, linké à 0x400000, ELF valide |
+| Debug amélioré | Port 0xE9, GPF/PF avec RIP/CR2 |
+| ELF loader (Phase A) | parse PT_LOAD, map_user_at, copy + zero BSS |
+| CR3 par processus (Phase B) | PDPT[1] isolé, switch dans irq_timer_stub |
+| 7 syscalls (Phase C) | write/exit/getpid/yield/open/read/close + fd table |
+| KFS v2 (Phase D) | FAT chaînée, 64 entrées, read_at positionnée |
 
 ---
 
-## Phase A — ELF Loader
+## Phase A — ELF Loader ✅
 > **Priorité absolue.** Sans ça, tout code userspace doit être linké dans le kernel.
 
 - [x] Parser ELF64 — lire les headers `Elf64_Phdr`, identifier les segments `PT_LOAD`
@@ -142,15 +139,15 @@ Tout ce qui suit construit *au-dessus* de cette frontière kernel/user.
 ## Ordre recommandé
 
 ```
-Maintenant  →  A  ELF loader
-            →  B  Isolation mémoire (CR3 par processus)
-            →  C  Syscalls complets
-            →  D  KFS v2
-            →  E  libkern (user library)
+✅ FAIT    →  A  ELF loader
+✅ FAIT    →  B  Isolation mémoire (CR3 par processus)
+✅ FAIT    →  C  Syscalls complets
+✅ FAIT    →  D  KFS v2
+Maintenant →  E  libkern (user library)
             →  F  IPC & Signaux
             →  G  Shell / UI
             →  H  Réseau  ← quand tout le reste est solide
 ```
 
-**Le vrai déblocage est A + B + C** : une fois qu'on peut charger un ELF isolé avec des syscalls
-corrects, l'OS devient un vrai OS. Tout le reste est de l'enrichissement.
+**Le vrai déblocage A + B + C + D est accompli** : ELF isolé, syscalls complets, filesystem
+multi-blocs. La prochaine étape (libkern) rend le développement userspace confortable.
