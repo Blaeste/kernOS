@@ -8,3 +8,6 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[dependencies]
+libkern = { path = "../libkern" }

@@ -93,13 +93,14 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 
 ---
 
-## Phase E — User library (libkern)
+## Phase E — User library (libkern) ✅
 > Sans ça, chaque programme réimplémente les appels système.
 
-- [ ] `libkern` — crate `no_std` linkée statiquement dans les user programs
-- [ ] Wrappers syscalls — `fn write(s: &str)`, `fn open(path) -> Fd`, etc.
-- [ ] Allocateur user — bump ou free list pour les programmes userspace
-- [ ] String / Vec en userspace — avec l'allocateur user
+- [x] `libkern` — crate `no_std` à `user/libkern/`, linkée via `path = "../libkern"`
+- [x] Wrappers syscalls — `write`, `exit`, `getpid`, `yield_cpu`, `open`, `close`, `read` + `print_u64`
+- [x] Bump allocator 16 Ko — `BumpAllocator` + `#[global_allocator]` dans `allocator.rs`
+- [x] `Vec<u8>` en userspace — `extern crate alloc; use libkern::*;` → Vec depuis heap user ✅
+- [x] `user/hello` simplifié — supprime les wrappers inline, utilise `use libkern::*`
 
 **Milestone :** un programme Rust userspace peut `use libkern::*;` et faire des I/O.
 
