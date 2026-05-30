@@ -73,10 +73,38 @@ Sans ça : GPF immédiat depuis ring 3.
 | GPF error 0x0, ptr=0x0 | `static &[u8]` = fat pointer, indirection nulle | `static [u8; 14]` + `sym MSG` |
 | GPF dans sys_write | TSS.rsp0 pointe sur pile kernel active, corruption | Pile dédiée `KERNEL_INT_STACK` |
 
+## Phase B — Isolation mémoire (CR3 par processus)
+
+Chaque processus ELF obtient sa propre PML4 via `paging::new_cr3()` :
+- `PDPT[0]` partagé = identity map kernel (0-1 Go, code/BSS/heap)
+- `PDPT[1]` vide = zone user isolée (1-2 Go), remplie par `map_user_at`
+- `Task.cr3` stocke l'adresse physique de la PML4 du processus
+
+Le timer stub charge `NEXT_CR3` (écrit par `schedule()`) après `mov rsp, new_rsp` :
+```asm
+mov rax, [NEXT_CR3]
+mov cr3, rax
+```
+
+**ELF relogé à 0x40000000** (1 Go, PDPT[1]) pour éviter les huge pages du kernel.
+Pile user à 0x40200000.
+
+## Phase C — ELF loader complet
+
+`elf::load(bytes, cr3)` charge dans le CR3 du processus :
+- `translate_in(cr3, vpage)` — vérifie si une page est déjà mappée (overlap PT_LOAD)
+- `map_user_at(cr3, vpage, frame)` — mappe dans le CR3 cible sans changer le courant
+
+`spawn_ring3(entry, user_stack, cr3)` écrit le frame iretq sur la **pile kernel** du slot
+(pas sur user_stack, inaccessible depuis le kernel CR3 au moment du setup).
+
 ## Fichiers
-- `src/userspace.rs` (nouveau) — tâche ring 3 + spawn_user
-- `src/task/scheduler.rs` — spawn_ring3()
+- `src/elf.rs` — ELF64 loader (parse PT_LOAD, map_user_at, translate_in, BSS zero)
+- `src/userspace.rs` — spawn_user / spawn_elf (new_cr3 + load + spawn_ring3)
+- `src/task/scheduler.rs` — Task{cr3, fds}, NEXT_CR3, spawn_ring3(entry, stack, cr3)
+- `src/mem/paging.rs` — new_cr3, map_user_at, translate_in, read_cr3 public
+- `src/interrupt.rs` — irq_timer_stub charge CR3 depuis NEXT_CR3
 - `src/gdt.rs` — KERNEL_INT_STACK, TSS.rsp0 dédié
-- `src/boot.asm` — bit U/S sur toutes les pages
-- `src/main.rs` — mod userspace
-- `src/shell.rs` — commande ring3
+- `src/main.rs` — TASKS[0].cr3 = NEXT_CR3 = boot_cr3 au démarrage
+- `src/shell.rs` — commandes ring3 + run
+- `user/hello/` — crate ELF userspace (syscall wrappers, test complet)

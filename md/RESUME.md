@@ -34,13 +34,17 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 2. ~~**Affichage VGA**~~ ✅ — print!/println! avec formatage
 3. ~~**Interruptions**~~ ✅ — IDT complète, exceptions CPU
 4. ~~**PIC + Clavier + Souris**~~ ✅ — PIC 8259, IRQ, scancodes, souris PS/2
-5. ~~**Scancodes → ASCII + Shell**~~ ✅ — Clavier ASCII, mini-shell (help, clear, reboot, uptime, memmap, frames)
-6. ~~**Allocateur + Timer**~~ ✅ — Bump allocator 64Ko, PIT 100Hz
+5. ~~**Scancodes → ASCII + Shell**~~ ✅ — Clavier ASCII, mini-shell complet
+6. ~~**Allocateur + Timer**~~ ✅ — Free-list allocator 256Ko, PIT 100Hz
 7. ~~**Mémoire physique**~~ ✅ — Memory map Multiboot2, frame allocator bitmap
-8. ~~**Pagination**~~ ✅ — Page tables 4 niveaux, map/unmap/translate
-9. ~~**Multitâche**~~ ✅ — Scheduler round-robin, context switch, spawn
-10. **Système de fichiers** — Lire/écrire sur disque
-11. ~~**Stack graphique**~~ ✅ — Framebuffer 800×600, police bitmap, FbWriter, double buffering, curseur souris, fenêtres, drag & drop, dirty rectangles
+8. ~~**Pagination**~~ ✅ — Page tables 4 niveaux, map/unmap/translate/map_user_at/new_cr3
+9. ~~**Multitâche**~~ ✅ — Scheduler round-robin, context switch, CR3 par processus
+10. ~~**Système de fichiers**~~ ✅ — KFS v2 : FAT chaînée, 64 fichiers, 64 Ko max
+11. ~~**Stack graphique**~~ ✅ — Framebuffer 1080p, double buffering, fenêtres, drag & drop
+12. ~~**Userspace ring 3**~~ ✅ — Phase A : ELF loader, Phase B : isolation CR3, Phase C : 7 syscalls
+13. **libkern** — crate userspace partagée (wrappers syscalls, allocateur user)
+14. **IPC & Signaux** — pipes, wait, fork
+15. **Shell amélioré + Réseau** — pipes, ANSI, VirtIO
 
 ## Architecture du Code
 
@@ -48,23 +52,40 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 src/
 ├── main.rs            point d'entrée, macros print!/println!
 ├── boot.asm           bootloader ASM 32→64 bit, Multiboot2
-├── interrupt.rs       IDT, handlers exceptions + IRQ stubs
-├── multiboot.rs       parsing tags Multiboot2 (memory map)
-├── shell.rs           mini-shell (buffer, commandes)
+├── interrupt.rs       IDT, handlers exceptions + IRQ stubs naked
+├── multiboot.rs       parsing tags Multiboot2 (memory map, framebuffer)
+├── shell.rs           mini-shell (buffer, commandes, 25+ commandes)
+├── syscall.rs         7 syscalls : write/exit/getpid/yield/open/read/close
+├── gdt.rs             GDT + TSS (segments kernel/user, rsp0)
+├── elf.rs             ELF64 loader (PT_LOAD, map_user_at, BSS zero)
+├── userspace.rs       spawn_user / spawn_elf (ring 3)
 ├── mem/
-│   ├── allocator.rs   bump allocator (heap 64Ko pour String, Vec)
-│   └── frame.rs       frame allocator bitmap (pages 4Ko)
+│   ├── allocator.rs   free-list allocator 256Ko
+│   ├── frame.rs       frame allocator bitmap (pages 4Ko)
+│   └── paging.rs      tables 4 niveaux, new_cr3, map_user_at, translate_in
+├── task/
+│   └── scheduler.rs   round-robin, Task{cr3, fds}, NEXT_CR3, spawn_ring3
 ├── drivers/
 │   ├── pic.rs         PIC 8259 init + EOI
-│   ├── keyboard.rs    scancode → ASCII, gestion Shift
+│   ├── keyboard.rs    scancode → ASCII, AZERTY/QWERTY
 │   ├── mouse.rs       souris PS/2, curseur graphique, drag
+│   ├── ata.rs         driver ATA PIO (read/write secteur)
 │   └── timer.rs       PIT 100Hz, compteur ticks
+├── fs/
+│   ├── kfs.rs         KFS v2 : FAT chaînée, 64 fichiers, 64 Ko max
+│   └── ramfs.rs       filesystem RAM temporaire
 ├── io/
-│   ├── vga.rs         affichage VGA (clear, scroll, backspace)
-│   ├── framebuffer.rs framebuffer graphique, double buffering, FbWriter
-│   └── font.rs        police bitmap VGA 8×16
-└── ui/
-    └── window.rs      fenêtres graphiques, drag & drop
+│   ├── vga.rs         affichage VGA texte
+│   ├── framebuffer.rs framebuffer 1080p, double buffering, PRINT_LOCK
+│   └── font.rs        police bitmap 8×16
+├── ui/
+│   ├── window.rs      window manager (z-order, drag, focus)
+│   ├── taskbar.rs     barre des tâches + horloge
+│   └── filewin.rs     fenêtre fichiers KFS cliquable
+└── klib/              utilitaires no_std (string, mem, cmp, debug)
+
+user/
+└── hello/             crate ELF userspace — teste tous les syscalls
 ```
 
 ## Commandes d'Installation

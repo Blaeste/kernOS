@@ -1,48 +1,52 @@
-# 24 — KFS : KernOS File System
+# 24 — KFS v2 : KernOS File System
 
 ## Objectif
 
-Avoir un vrai filesystem persisté sur disque. Les fichiers survivent au reboot.
+Filesystem persisté sur disque ATA. Fichiers de taille variable, 64 entrées max, 64 Ko par fichier.
 
-## Architecture disque
+## Architecture disque (v2)
 
 ```
-Secteur 0       → SuperBlock (magic, version, file_count)
-Secteurs 1-8    → FileEntry (1 entrée par secteur, max 8 fichiers)
-Secteurs 9-16   → Données (1 fichier = 1 secteur = 512 octets max)
+Secteur 0        → SuperBlock (magic=0x4B465300, version=2)
+Secteurs 1-4     → Table fichiers : 64 entrées × 32 octets (16 par secteur)
+Secteur 5        → FAT : 128 u32 (liste chaînée de blocs)
+Secteurs 6-133   → Blocs de données : 128 × 512 octets = 64 Ko total
 ```
+
+## FAT (File Allocation Table)
+
+Chaque entrée FAT[i] est un u32 :
+- `0x00000000` = bloc libre
+- `0xFFFFFFFF` = fin de chaîne (dernier bloc du fichier)
+- `n` = index du bloc suivant dans la chaîne
+
+Exemple : fichier 1200 octets → 3 blocs → `FAT[2]=7, FAT[7]=11, FAT[11]=0xFFFFFFFF`
 
 ## Structures
 
 ### SuperBlock (512 octets, secteur 0)
-| Champ       | Type     | Description                        |
-|-------------|----------|------------------------------------|
-| magic       | u32      | `0x4B465300` = "KFS\0"             |
-| version     | u32      | Version du filesystem (1)          |
-| file_count  | u32      | Nombre de fichiers (non utilisé)   |
-| _pad        | [u8;500] | Padding pour remplir 512 octets    |
+| Champ   | Type     | Description             |
+|---------|----------|-------------------------|
+| magic   | u32      | `0x4B465300` = "KFS\0"  |
+| version | u32      | Version = 2             |
+| _pad    | [u8;504] | Padding 512 octets      |
 
-### FileEntry (512 octets, secteurs 1-8)
-| Champ     | Type      | Description                          |
-|-----------|-----------|--------------------------------------|
-| used      | u8        | 0 = libre, 1 = occupé               |
-| name      | [u8;28]   | Nom du fichier (null-terminated)     |
-| size      | u32       | Taille en octets                     |
-| data_lba  | u32       | Secteur LBA des données             |
-| _pad      | [u8;475]  | Padding pour remplir 512 octets      |
+### FileEntry (32 octets, 16 par secteur)
+| Champ | Type      | Description                              |
+|-------|-----------|------------------------------------------|
+| used  | u8        | 0=libre, 1=utilisé                       |
+| name  | [u8;23]   | Nom du fichier                           |
+| size  | u32       | Taille en octets                         |
+| first | u32       | Index du premier bloc FAT (0xFFFF=vide)  |
 
 ## Fonctions (fs/kfs.rs)
 
-- `init()` — au boot, lit le superbloc. Si magic absent → formate le disque
-- `create(name, data)` — trouve un slot libre, écrit l'entrée + les données
-- `list(cb)` — itère les entrées utilisées, appelle le callback avec (name, size)
-- `read(name, out)` — cherche par nom, lit les données dans `out`, retourne la taille
-- `delete(name)` — cherche par nom, écrase le slot avec une entrée vide
-
-## Helpers
-
-- `name_len(name)` — longueur du nom jusqu'au premier `\0`
-- `name_eq(a, b)` — compare deux slices octet par octet
+- `init()` — formate si magic/version invalide (migration v1→v2 automatique)
+- `create(name, data)` — alloue les blocs nécessaires, chaîne la FAT, écrit
+- `read(name, out)` — lit depuis le début du fichier dans `out`
+- `read_at(name, offset, out)` — lit depuis `offset` (utilisé par `sys_read` + `fd.pos`)
+- `list(cb)` — callback (name, size) pour chaque fichier
+- `delete(name)` — libère la chaîne FAT + efface l'entrée
 
 ## Commandes shell
 
@@ -55,14 +59,11 @@ Secteurs 9-16   → Données (1 fichier = 1 secteur = 512 octets max)
 
 ## Limites actuelles
 
-- Max 8 fichiers
-- Max 512 octets par fichier (1 secteur)
+- Max 64 fichiers
+- Max 64 Ko par fichier (128 blocs × 512 octets)
 - Pas de sous-dossiers
+- Pas de cache secteur (chaque accès = lecture ATA)
 
-## Fichiers modifiés
+## Fichiers
 
-- `src/fs/kfs.rs` — nouveau, tout le filesystem + helpers `name_len`, `name_eq`
-- `src/fs/mod.rs` — `pub mod kfs`
-- `src/shell.rs` — commandes kfsLs, kfsWrite, kfsRead, kfsDel + help (concat!)
-- `src/main.rs` — `fs::kfs::init()` au boot + `bind_writer_to_win` auto
-- `src/io/framebuffer.rs` — `bind_writer_to_win`, `TEXT_MAX_COLS/ROWS` constantes, text_buf agrandi
+- `src/fs/kfs.rs` — réécriture complète v2 (FAT, read_at, create multi-blocs)
