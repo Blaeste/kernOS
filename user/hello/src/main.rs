@@ -55,6 +55,26 @@ pub extern "C" fn _start() -> ! {
         write(b"[hello] close:  ok\n");
     }
 
+    // ── Test pipe ─────────────────────────────────────────────────────────
+    let (fd_r, fd_w) = pipe();
+    if fd_r == u64::MAX {
+        write(b"[hello] pipe:    erreur\n");
+    } else {
+        // Ecrit dans le write-end
+        let msg = b"pipe ok";
+        unsafe { sys(0, fd_w, msg.as_ptr() as u64, msg.len() as u64); }
+
+        // Lit depuis le read-end
+        let mut pbuf = [0u8; 32];
+        let n = read(fd_r, &mut pbuf);
+        write(b"[hello] pipe:    ");
+        write(&pbuf[..n as usize]);
+        write(b"\n");
+
+        close(fd_w);
+        close(fd_r);
+    }
+
     exit(0);
 }
 

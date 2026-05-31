@@ -17,6 +17,7 @@ pub const MAX_FDS:      usize = 8;
 /// fd 3..7 pointent vers des fichiers KFS ouverts.
 pub struct FileDesc {
     pub active:     bool,
+    pub kind:       u8,         // 0=KFS 1=pipe_read 2=pipe_write
     pub name:       [u8; 28],   // nom KFS (NAME_MAX = 28)
     pub pos:        usize,      // position de lecture courante
 }
@@ -29,20 +30,22 @@ pub struct FileDesc {
 // stack en premier (offset 0) → &stack[0] = adresse de la Task = 16-byte alignée.
 #[repr(C, align(16))]
 pub struct Task {
-    pub stack:  [u8; STACK_SIZE],  // La pile (en premier → offset 0, alignée 16)
-    pub rsp:    u64,               // pointeur de pile sauvegardé
-    pub active: bool,
-    pub cr3:    u64,
-    pub fds:    [FileDesc; MAX_FDS],
+    pub stack:          [u8; STACK_SIZE],       // La pile (en premier → offset 0, alignée 16)
+    pub rsp:            u64,                    // pointeur de pile sauvegardé
+    pub active:         bool,
+    pub cr3:            u64,
+    pub fds:            [FileDesc; MAX_FDS],
+    pub waiting_for:    usize,                  // usize::MAX = pas en attente
 }
 
 /// Tableau de toutes les tâches (slots fixes)
 pub static mut TASKS: [Task; MAX_TASKS] = [const { Task {
-    stack:  [0; STACK_SIZE],
-    rsp:    0,
-    active: false,
-    cr3:    0,
-    fds:    [const { FileDesc { active: false, name: [0; 28], pos: 0 } }; MAX_FDS],
+    stack:          [0; STACK_SIZE],
+    rsp:            0,
+    active:         false,
+    cr3:            0,
+    fds:            [const { FileDesc { active: false, kind: 0, name: [0; 28], pos: 0 } }; MAX_FDS],
+    waiting_for:    usize::MAX,
 } }; MAX_TASKS];
 
 /// CR3 à charger lors du prochain context switch - écrit par schedule(),
@@ -130,6 +133,12 @@ pub fn spawn_ring3(entry: u64, user_stack: u64, cr3: u64) {
         ptr.add(18).write(user_stack);
         ptr.add(19).write(crate::gdt::USER_DATA as u64);
 
+        // réinitialise le slot - peut être réutilisé après task_exit
+        task.waiting_for = usize::MAX;
+        for fd in task.fds.iter_mut() {
+            fd.active = false;
+        }
+
         task.rsp    = kstack_top - 160;
         task.cr3    = cr3;
         task.active = true;
@@ -149,9 +158,18 @@ pub fn schedule(old_rsp: u64) -> u64 {
         // Round-robin : cherche la prochaine tâche active
         let mut next = cur;
         for _ in 0..MAX_TASKS {
+
             next = (next + 1) % MAX_TASKS;
-            if (*addr_of!(TASKS))[next].active {
-                break;
+
+            let t = &(*addr_of!(TASKS))[next];
+            if t.active {
+
+                // Runnable si : pas en attente OU la tâche attendue a terminé
+                let wf = t.waiting_for;
+                if wf == usize::MAX || !(*addr_of!(TASKS))[wf].active {
+
+                    break;
+                }
             }
         }
 
@@ -167,6 +185,16 @@ pub fn schedule(old_rsp: u64) -> u64 {
 pub fn task_exit() {
     unsafe {
         let cur = *addr_of!(CURRENT);
+
+        // Reveille toute tâche bloquée sur ce pid
+        for i in 0..MAX_TASKS {
+
+            if (*addr_of!(TASKS))[i].waiting_for == cur {
+
+                (*addr_of_mut!(TASKS))[i].waiting_for = usize::MAX;
+            }
+        }
+        
         (*addr_of_mut!(TASKS))[cur].active = false;
         // Force un reschedule immédiat
         core::arch::asm!("int 0x20", options(nostack));

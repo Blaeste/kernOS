@@ -103,3 +103,23 @@ pub fn print_u64(mut n: u64) {
 
     write(&buf[i..]);
 }
+
+// ── IPC (Phase F) ─────────────────────────────────────────────────────────
+
+pub const SIGKILL: u64 = 9;
+
+/// Envoie un signal à un processus. SIGKILL(9) = termine immédiatement.
+pub fn kill(pid: u64, sig: u64) -> u64  { unsafe { sys(7, pid, sig, 0) } }
+
+/// BLoque jusqu'à ce que le processus 'pid' se termine.
+pub fn wait(pid: u64)                    { unsafe { sys(8, pid, 0, 0); } }
+
+/// Crée un pipe. Retourne (fd_read, fd_write) ou (MAX, MAX) si erreur.
+pub fn pipe() -> (u64, u64) {
+
+    let p = unsafe { sys(9, 0, 0, 0) };
+
+    if p == u64::MAX { return (u64::MAX, u64::MAX); }
+
+    (p >> 32, p & 0xFFFF_FFFF)
+}

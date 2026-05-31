@@ -53,9 +53,23 @@ pub fn init(multiboot_addr: u64) {
         }
     });
 
-    // Protège les 2 premiers Mo (kernel + tables de pages + stack)
-    for f in 0..512 {
-        set_used(f);
+    // Protège TOUT le kernel : de 0 jusqu'à kernel_end (symbole du linker).
+    // Le BSS contient BACK_BUFF (~8 Mo), TASKS, le heap...
+    // Sans ça, frame::alloc() rendrait des frames physiques situés DANS le BSS
+    // du kernel -> corruption des page tables / structures -> triple fault.
+    unsafe extern "C" {
+        static kernel_end: u8;
+    }
+    
+    let kend = core::ptr::addr_of!(kernel_end) as usize;
+    let end_frame = (kend + FRAME_SIZE - 1) / FRAME_SIZE;
+
+    for f in 0..end_frame {
+
+        if f < MAX_FRAMES {
+
+            set_used(f);
+        }
     }
 }
 

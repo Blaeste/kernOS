@@ -106,13 +106,19 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 
 ---
 
-## Phase F — IPC & Signaux
+## Phase F — IPC & Signaux ✅
 > Pour que les programmes communiquent.
 
-- [ ] Pipe — buffer circulaire kernel partagé entre 2 fd (un writer, un reader)
-- [ ] Signaux basiques — `SIGKILL` (termine), `SIGSTOP` / `SIGCONT`
-- [ ] `wait(pid)` — syscall pour attendre la fin d'un enfant
-- [ ] `fork()` simplifié — clone CR3 + task (copy-on-write optionnel)
+- [x] Pipe — buffer circulaire 256 o dans le kernel, `src/ipc.rs`, jusqu'à 4 pipes
+- [x] fd typés — `FileDesc.kind` (KFS / pipe_read / pipe_write), read/write/close routés
+- [x] `SYS_PIPE` (9) → `(fd_r << 32) | fd_w` ; testé write→read dans user/hello ✅
+- [x] `wait(pid)` (8) — `Task.waiting_for`, scheduler skip les tâches en attente
+- [x] `kill(pid, 9)` (7) — SIGKILL marque la tâche inactive + réveille les waiters
+- [x] **Fix critique frame allocator** — protège tout le kernel via `kernel_end`
+      (le BSS fait ~8 Mo à cause de BACK_BUF ; avant, `alloc()` rendait des frames
+      dans le BSS → triple fault au 2ème `run`)
+- [ ] `SIGSTOP` / `SIGCONT` — pause/reprise (Phase ultérieure)
+- [ ] `fork()` — clone CR3 + task, copy-on-write (Phase ultérieure)
 
 ---
 
