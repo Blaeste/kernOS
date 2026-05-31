@@ -40,9 +40,11 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 - [x] Allouer des frames user — pour chaque segment : frame allocator → pages U/S mappées
 - [x] Copier les segments — charger le code/data à leur adresse virtuelle cible
 - [x] Lancer en ring 3 — `include_bytes!` + `elf::load()` + `spawn_ring3()` depuis le shell → **"Hello from ELF!" ✅**
-- [ ] Stocker les ELF dans KFS — un fichier KFS = un binaire exécutable (Phase D)
+- [x] Stocker + exécuter les ELF depuis KFS — `install <nom>` écrit l'ELF sur disque, `run <nom>` le relit et le charge ✅
+- [x] ELF strippé (`strip = true`) — 980 Ko → 18 Ko, rentre dans KFS (64 Ko max)
+- [x] Fix `elf::load` multi-pages — segments non alignés sur >1 page (le strip compacte → `done` mal compté → .rodata corrompue → GPF)
 
-**Milestone :** `run monprog` dans le shell charge et exécute un ELF depuis le disque en ring 3.
+**Milestone :** ✅ `run <nom>` charge et exécute un ELF depuis le disque KFS en ring 3.
 
 ---
 
@@ -146,13 +148,13 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 ## Ordre recommandé
 
 ```
-✅ FAIT    →  A  ELF loader
+✅ FAIT    →  A  ELF loader (+ exec depuis KFS)
 ✅ FAIT    →  B  Isolation mémoire (CR3 par processus)
 ✅ FAIT    →  C  Syscalls complets
 ✅ FAIT    →  D  KFS v2
-Maintenant →  E  libkern (user library)
-            →  F  IPC & Signaux
-            →  G  Shell / UI
+✅ FAIT    →  E  libkern (user library)
+✅ FAIT    →  F  IPC & Signaux
+Maintenant →  G  Shell / UI
             →  H  Réseau  ← quand tout le reste est solide
 ```
 

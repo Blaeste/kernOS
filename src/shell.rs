@@ -163,6 +163,8 @@ fn execute(cmd: &[u8]) {
             "  syscalltest - test syscall write on fd=1\n",
             "  ring3       - lance une tache en ring 3\n",
             "  run         - lance un ELF en ring 3\n",
+            "  run [nom]   - lance un ELF (embarque, ou depuis KFS si nom)\n",
+            "  install nom - copie l'ELF hello dans KFS sous <nom>\n",
         ));
     }
 
@@ -371,7 +373,19 @@ fn execute(cmd: &[u8]) {
     }
 
     else if eq(name, b"run") {
-        crate::userspace::spawn_elf();
+        if args.is_empty() {
+            crate::userspace::spawn_elf();
+        } else {
+            crate::userspace::spawn_elf_from_kfs(args);
+        }
+    }
+
+    else if eq(name, b"install") {
+        if args.is_empty() {
+            println!("usage: install <nom>");
+        } else {
+            crate::userspace::install_hello(args);
+        }
     }
 
     else if name.is_empty() {

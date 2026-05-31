@@ -1,6 +1,9 @@
-cargo build
+#cargo build --release
+#Copy-Item target/x86_64-unknown-none/release/kernos target/isodir/boot/kernos
 
+cargo build
 Copy-Item target/x86_64-unknown-none/debug/kernos target/isodir/boot/kernos
+
 
 if (-not (Test-Path "target/disk.img")) {
     & "C:\Program Files\qemu\qemu-img.exe" create -f raw target/disk.img 10M

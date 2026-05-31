@@ -156,13 +156,19 @@ pub fn load(bytes: &[u8], cr3: u64) -> Option<u64> {
         let vaddr   = phdr.p_vaddr;
 
         // ── Chargement page par page ──────────────────────
-        // Un segment peut couvrir plusieur pages (ex: 12 Ko = 3 frames).
-        // On avance de 4096 en 4096 jusqu'à avoir couvert tout memsz.
-        let mut done = 0usize;
-        while done < memsz {
-            // Si la page est déjà mappée (autre segment sur la même page),
-            // on réutilise le frame existant au lieu d'en allouer un nouveau.
-            let vpage = (vaddr as usize + done) & !0xFFF;
+        // p_vaddr n'es tpas focément aligné sur 4 Ko : la 1re page démarre à
+        // un offset interne, on avance ensuite pile sur les frontières de page.
+        // 'off" = position courante DANS le segement (0..memsz).
+        let mut off = 0usize;
+        while off < memsz {
+
+            let va              = vaddr as usize + off;
+            let vpage           = va & !0xFFF;
+            let page_off        = va & 0xFFF;               // offset dans la page courante
+            let page_bytes      = 4096 - page_off;          // octets restants dans cette page
+
+            // Réutilise le frame si la page est déja mappé (segment qui
+            // partagent un page), sinon en alloue un nouveau.
             let frame_phys = match paging::translate_in(cr3, vpage as u64) {
                 Some(phys) => phys & !0xFFF,
                 None => {
@@ -172,31 +178,31 @@ pub fn load(bytes: &[u8], cr3: u64) -> Option<u64> {
                 }
             };
 
-            // La première page peut démarrer en millieu de frame si p_vaddr
-            // n'est pas aligné sur 4 Ko (ex: 0x401008 → page_off = 8).
-            // Les pages suivantes démarrent toujours à l'offset 0.
-            let page_off = if done == 0 { vaddr as usize & 0xFFF } else { 0 };
+            // Octets de fichier encore à copier pour ce segment.
+            let file_left = filesz.saturating_sub(off);
+            let copy_len = page_bytes.min(file_left);
 
-            // Nombre d'octets du fichier à copier dans cette page
-            let copy_len = (4096 - page_off).min(filesz.saturating_sub(done));
-
+            // Portion du segment dans cette page (au-delà = BSS à zéro)
+            let seg_left = memsz - off;
+            let fill_end = page_bytes.min(seg_left);
+        
             unsafe {
                 let dst = (frame_phys + page_off as u64) as *mut u8;
 
                 // ── Copie des octets du fichier ───────────
                 for j in 0..copy_len {
-                    dst.add(j).write(bytes[src_off + done + j]);
+                    dst.add(j).write(bytes[src_off + off + j]);
                 }
 
                 // ── Zero du BSS ───────────────────────────
                 // Les octets entre filesz et memsz (section .bss) doivent
                 // être à zéro — le programme suppose que c'est le cas.
-                for j in copy_len..(4096 - page_off) {
+                for j in copy_len..fill_end {
                     dst.add(j).write(0);
                 }
             }
 
-            done += 4096;
+            off += page_bytes;  // saute exactement à la prochaine frontière de page
         }
     }
 
