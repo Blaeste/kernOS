@@ -131,7 +131,7 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 - [x] Terminal ANSI — `\e[…m` parsé dans `FbWriter` : 16 couleurs fg + bold, reset. Commande `colors` ✅
 - [ ] Fenêtres redimensionnables — coin drag resize
 - [ ] Éditeur de texte intégré — ouvre un fichier KFS, édite, `Ctrl+S` sauvegarde
-- [ ] Launcher — clic sur icône → `exec` d'un ELF
+- [x] Launcher — bouton `> hello` dans la taskbar → clic lance l'ELF en ring 3 (+ fix flicker : les clics taskbar ne forcent plus de redraw plein écran) ✅
 
 ---
 

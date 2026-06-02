@@ -153,6 +153,12 @@ pub fn draw_all() {
 pub fn on_mouse_down(mx: i32, my: i32) {
     unsafe {
         if DRAGGING { return; }
+
+        // Clic dans la taskbar : géré par taskbar::on_click. On ne defocus pas
+        // ici -> évite un redraw plein écran inutile à chaque clic sur la barre.
+        let sh_tb = *addr_of!(crate::io::framebuffer::FB_HEIGHT) as i32;
+        if my >= sh_tb - crate::ui::taskbar::TASKBAR_H as i32 { return; }
+        
         // Parcourir les fenêtre de la plsu haute (dernière) à la plus basse
         let mut i = WINDOW_COUNT;
         while i > 0 {

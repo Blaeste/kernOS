@@ -23,6 +23,7 @@ pub const TASKBAR_H:    u32 = 30;
 const BTN_W:            u32 = 120;
 const BTN_H:            u32 = 22;
 const BTN_MARGIN:       u32 = 4;
+const LAUNCH_W:         u32 = 96;
 
 /// Dessine la taskbar en bas de l'écran
 pub fn draw() {
@@ -46,6 +47,12 @@ pub fn draw() {
             draw_string(btn_x + 4, btn_y + (BTN_H - 16) / 2, title_str, BTN_FG, color);
             i += 1;
         }
+
+        // ── Bouton launcher (lance l'ELF hello en ring 3) ─────
+        // Placé à gauche de l'horloge, en vert pour le distinguer.
+        let launch_x = sw - 156;
+        let launch_y = sh - TASKBAR_H + (TASKBAR_H - BTN_H) / 2;
+        fill_rect(launch_x, launch_y, LAUNCH_W, BTN_H, 0x2E8B57);
 
         // Uptime à droite
         let ticks = crate::drivers::timer::get_ticks();
@@ -73,6 +80,15 @@ pub fn on_click(mx: i32, my: i32) -> bool {
     unsafe {
         let sh = *addr_of!(crate::io::framebuffer::FB_HEIGHT);
         if my < (sh - TASKBAR_H) as i32 { return false; }
+
+        let sw = *addr_of!(crate::io::framebuffer::FB_WIDTH);
+        // Bouton launcher ; lance l'ELF hello
+        let launch_x = (sw - 156) as i32;
+        let launch_y = (sh - TASKBAR_H + (TASKBAR_H - BTN_H) / 2) as i32;
+        if mx >= launch_y && my < launch_y + BTN_H as i32 {
+            crate::userspace::spawn_elf();
+            return false;
+        }
 
         let count = *addr_of!(crate::ui::window::WINDOW_COUNT);
         let mut i  = 0;
