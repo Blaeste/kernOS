@@ -115,6 +115,7 @@ static mut PACKET_IDX:      usize = 0;
 pub static mut MOUSE_X:     i32 = 0;                      // position X en pixels
 pub static mut MOUSE_Y:     i32 = 0;                      // position Y en pixels
 
+static mut PREV_LEFT:       bool = false;                 // état du bouton gauche au paquet précésent
 static mut OLD_MOUSE_X:     i32 = 0;                      // ancienne position X (pour effacer)
 static mut OLD_MOUSE_Y:     i32 = 0;                      // ancienne position Y (pour effacer)
 
@@ -192,12 +193,41 @@ pub fn on_irq(byte: u8) {
             let mx = *addr_of!(MOUSE_X);
             let my = *addr_of!(MOUSE_Y);
 
+            // Front montant : le bouton vient d'être pressé à CE paquet
+            let prev = *addr_of!(PREV_LEFT);
+            *addr_of_mut!(PREV_LEFT) = btn_left;
+            let just_pressed = btn_left && !prev;
+
+            // Efface l'ancien curseur avant totu redraw. Sinon, en resize
+            // (souris libre) le redraw partiel ne repeint pas la zone du surseur -> fantome.
+            
+            let ox = *addr_of!(OLD_MOUSE_X) as u32;
+            let oy = *addr_of!(OLD_MOUSE_Y) as u32;
+            crate::io::framebuffer::mark_dirty(ox, oy, CURSOR_W, CURSOR_H);
+            let mut i = 0;
+
+            while i < CURSOR_H {
+                let mut j = 0;
+                while j < CURSOR_W {
+                    let px = CURSOR_BACKUP[(i * CURSOR_W + j) as usize];
+                    crate::io::framebuffer::put_pixel(ox + j, oy + i, px);
+                    crate::io::framebuffer::put_pixel_direct(ox + j, oy + i, px);
+                    j += 1;
+                }
+                i += 1;
+            }
+            
             let mut redrawn = false;
             if btn_left {
-                crate::ui::window::on_mouse_down(mx, my);
-                if crate::ui::taskbar::on_click(mx, my) {
-                    crate::ui::window::set_needs_redraw();
+                // Démarrage drag/resize + clic taskbar : UNIQUEMENT au front motant
+                // (sinon spawn elf / toggle se répètent à chque paquet -> crash).
+                if just_pressed {
+                    crate::ui::window::on_mouse_down(mx, my);
+                    if crate::ui::taskbar::on_click(mx, my) {
+                        crate::ui::window::set_needs_redraw();
+                    }
                 }
+                // Tan que maintenu : on continue le drag/resize
                 crate::ui::window::erase_dragged_window();
                 crate::ui::window::on_mouse_move(mx, my);
                 let need_redraw = crate::ui::window::needs_redraw();
@@ -212,24 +242,6 @@ pub fn on_irq(byte: u8) {
                 }
             } else {
                 crate::ui::window::on_mouse_up();
-            }
-
-            // Efface l'ancien curseur (replace ancien pixels sauvgardé)
-            if !redrawn {
-                let ox = *addr_of!(OLD_MOUSE_X) as u32;
-                let oy = *addr_of!(OLD_MOUSE_Y) as u32;
-                crate::io::framebuffer::mark_dirty(ox, oy, CURSOR_W, CURSOR_H);
-                let mut i = 0;
-
-                while i < CURSOR_H {
-                    let mut j = 0;
-                    while j < CURSOR_W {
-                        crate::io::framebuffer::put_pixel(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
-                        crate::io::framebuffer::put_pixel_direct(ox + j, oy + i, CURSOR_BACKUP[(i * CURSOR_W + j) as usize]);
-                        j += 1;
-                    }
-                    i += 1;
-                }
             }
 
             // Sauvegarde les pixels sous le nouveau curseur

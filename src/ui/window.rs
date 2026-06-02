@@ -29,8 +29,11 @@ use crate::klib::cmp::min;
 use crate::klib::mem::memcpy;
 
 /// Fenêtre
-const BORDER:       u32 = 1;            // épaisseur bordure
-const TITLE_H:      u32 = 20;           // hauteur barre de titre
+const BORDER:           u32 = 1;        // épaisseur bordure
+const TITLE_H:          u32 = 20;       // hauteur barre de titre
+const RESIZE_BORDER:    u32 = 16;       // zone cliquable de resize (coin bas droit)
+const MIN_W:            u32 = 140;      // taille mini d'un fenetre
+const MIN_H:            u32 = 80;
 
 /// Nombre max de fenêtres
 const MAX_WINDOWS: usize = 8;
@@ -66,6 +69,9 @@ static mut DRAGGING:        bool = false;
 static mut DRAG_WIN:        usize = 0;
 static mut DRAG_OFFSET_X:   i32 = 0;
 static mut DRAG_OFFSET_Y:   i32 = 0;
+static mut RESIZE_MOD:      bool = false;   // true = le drag redimensionne au lieud e déplacer
+static mut OLD_WIN_W:       u32 = 0;
+static mut OLD_WIN_H:       u32 = 0;
 
 static mut Z_ORDER: [usize; MAX_WINDOWS] = [0; MAX_WINDOWS];
 
@@ -128,6 +134,9 @@ fn draw_one(win: &Window, idx: usize) {
 
     // Contenu
     fill_rect(x + BORDER, y + BORDER + TITLE_H, w - 2 * BORDER, h - 2 * BORDER - TITLE_H, WIN_CONTENT);
+
+    // Poignée de redimensionnement (dessinée APRÈS le contenu pour rester visible)
+    fill_rect(x + w - BORDER - 10, y + h - BORDER - 10, 10, 10, WIN_BORDER);
 }
 
 /// Dessine toutes les fenêtres (z-order = odre du tableau)
@@ -151,6 +160,7 @@ pub fn draw_all() {
 
 /// CLic gauche enfoncé - comme le drag si on clique sur une barre de titre
 pub fn on_mouse_down(mx: i32, my: i32) {
+
     unsafe {
         if DRAGGING { return; }
 
@@ -158,7 +168,7 @@ pub fn on_mouse_down(mx: i32, my: i32) {
         // ici -> évite un redraw plein écran inutile à chaque clic sur la barre.
         let sh_tb = *addr_of!(crate::io::framebuffer::FB_HEIGHT) as i32;
         if my >= sh_tb - crate::ui::taskbar::TASKBAR_H as i32 { return; }
-        
+
         // Parcourir les fenêtre de la plsu haute (dernière) à la plus basse
         let mut i = WINDOW_COUNT;
         while i > 0 {
@@ -170,6 +180,7 @@ pub fn on_mouse_down(mx: i32, my: i32) {
             let wx = win.x as i32;
             let wy = win.y as i32;
             let ww = win.w as i32;
+            let wh = win.h as i32;
 
             // Bouton fermer ?
             let btn_x = (win.x + win.w - BORDER - CLOSE_BTN_SIZE - 2) as i32;
@@ -183,12 +194,32 @@ pub fn on_mouse_down(mx: i32, my: i32) {
                 return;
             }
 
+            // Coin bas-droit ? -> redimensionnement
+            let corner = RESIZE_BORDER as i32;
+            if mx >= wx + ww - corner && mx < wx + ww
+                && my >= wy + wh - corner && my < wy + wh {
+
+                    DRAGGING = true;
+                    RESIZE_MOD = true;
+                    DRAG_WIN = idx;
+                    *addr_of_mut!(OLD_WIN_X) = WINDOWS[idx].x;
+                    *addr_of_mut!(OLD_WIN_Y) = WINDOWS[idx].y;
+                    *addr_of_mut!(OLD_WIN_W) = WINDOWS[idx].w;
+                    *addr_of_mut!(OLD_WIN_H) = WINDOWS[idx].h;
+                    bring_to_front(idx);
+                    FOCUSED_WIN = idx;
+                    NEEDS_REDRAW = true;
+                    return;
+            }
+
             // Est-ce que le clic est dans la barre de titre ?
             if mx >= wx && mx < wx + ww && my >= wy && my < wy + TITLE_H as i32 + BORDER as i32 {
                 DRAGGING = true;
                 DRAG_WIN = idx;
                 *addr_of_mut!(OLD_WIN_X) = WINDOWS[idx].x;
                 *addr_of_mut!(OLD_WIN_Y) = WINDOWS[idx].y;
+                *addr_of_mut!(OLD_WIN_W) = WINDOWS[idx].w;
+                *addr_of_mut!(OLD_WIN_H) = WINDOWS[idx].h;
                 bring_to_front(idx);
                 DRAG_OFFSET_X = mx - wx;
                 DRAG_OFFSET_Y = my - wy;
@@ -199,7 +230,6 @@ pub fn on_mouse_down(mx: i32, my: i32) {
 
             // CLic dans la zone contenu ?
             let content_y = wy + TITLE_H as i32 +  BORDER as i32;
-            let wh = win.h as i32;
             if mx >= wx && mx < wx + ww && my >= content_y && my < wy + wh {
                 FOCUSED_WIN = idx;
                 bring_to_front(idx);
@@ -218,8 +248,31 @@ pub fn on_mouse_down(mx: i32, my: i32) {
 
 /// Souris bouge avec clic maintenu - déplace la fenêtre
 pub fn on_mouse_move(mx: i32, my: i32) {
+
     unsafe {
         if !DRAGGING { return; }
+
+        if RESIZE_MOD {
+
+            let wx = WINDOWS[DRAG_WIN].x as i32;
+            let wy = WINDOWS[DRAG_WIN].y as i32;
+            let sw = *addr_of!(crate::io::framebuffer::FB_WIDTH) as i32;
+            let sh = *addr_of!(crate::io::framebuffer::FB_HEIGHT) as i32;
+            let taskbar_h = crate::ui::taskbar::TASKBAR_H as i32;
+
+            let mut new_w = mx - wx;
+            let mut new_h = my - wy;
+
+            if new_w < MIN_W as i32 { new_w = MIN_W as i32; }
+            if new_h < MIN_H as i32 { new_h = MIN_H as i32; }
+            if wx + new_w > sw { new_w = sw - wx; }
+            if wy + new_h > sh - taskbar_h { new_h = sh - taskbar_h - wy; }
+
+            WINDOWS[DRAG_WIN].w = new_w as u32;
+            WINDOWS[DRAG_WIN].h = new_h as u32;
+            return;
+        }
+
         let mut new_x = mx - DRAG_OFFSET_X;
         let mut new_y = my - DRAG_OFFSET_Y;
 
@@ -248,17 +301,17 @@ pub fn on_mouse_move(mx: i32, my: i32) {
 pub fn erase_dragged_window() {
     unsafe {
         if !DRAGGING { return; }
-        let ox = *addr_of!(OLD_WIN_X);
-        let oy = *addr_of!(OLD_WIN_Y);
-        let w = WINDOWS[DRAG_WIN].w;
-        let h = WINDOWS[DRAG_WIN].h;
+        // Efface le rectangle du frame précédent (position + taille).
+        // En rétrécissant, ça repeint au fond la zone libérée -> pas de fantôme.
         crate::io::framebuffer::fill_rect(
-            ox, oy, w, h,
-            crate::ui::theme::DESKTOP_BG
+            OLD_WIN_X, OLD_WIN_Y, OLD_WIN_W, OLD_WIN_H,
+            crate::ui::theme::DESKTOP_BG,
         );
         // Sauvegarde la position courante comme "ancienne" pour le prochain appel
         *addr_of_mut!(OLD_WIN_X) = WINDOWS[DRAG_WIN].x;
         *addr_of_mut!(OLD_WIN_Y) = WINDOWS[DRAG_WIN].y;
+        *addr_of_mut!(OLD_WIN_W) = WINDOWS[DRAG_WIN].w;
+        *addr_of_mut!(OLD_WIN_H) = WINDOWS[DRAG_WIN].h;
     }
 }
 
@@ -266,6 +319,7 @@ pub fn erase_dragged_window() {
 pub fn on_mouse_up() {
     unsafe {
         DRAGGING = false;
+        RESIZE_MOD = false;
     }
 }
 
@@ -327,8 +381,31 @@ pub fn redraw_writer_if_visible() {
         // Sync la zone d'écriture sur la position actuelle de la fenetre
         writer.x_origin = win.x + BORDER;
         writer.y_origin = win.y + BORDER + TITLE_H;
-        writer.max_cols = (win.w - 2 * BORDER) / 8;
-        writer.max_rows = (win.h - 2 * BORDER - TITLE_H) / 16;
+
+        // Le text_buf du writer est borné (100x200) : on ne peut aps afficher
+        // plus de colonnes/lignes que sa taille, sinon index out of bounds au
+        // redraw (et au write_byte). On clampe.
+        let mut mc = (win.w - 2 * BORDER) / 8;
+        let mut mr = (win.h - 2 * BORDER - TITLE_H) / 16;
+        let max_c = crate::io::framebuffer::TEXT_MAX_COLS as u32;
+        let max_r = crate::io::framebuffer::TEXT_MAX_ROWS as u32;
+        if mc > max_c { mc = max_c; }
+        if mr > max_r { mc = max_r; }
+
+        // Le text_buff est aligné en bas : buf_row = (TEXT_MAX_ROWs - max_rows) + row.
+        // Quand la hauteur visible (max_rows) change au resize, on décale la ligne
+        // du curseur du même delta pour rester sur la même ligne de texte
+        // (sinon prompt + saisie se désalignent).
+        let old_mr = writer.max_rows;
+        if old_mr != 0 {
+            let delta = mr as i32 - old_mr as i32;
+            let new_row = writer.row as i32 + delta;
+            writer.row = new_row.clamp(0, mr as i32 - 1) as u32;
+        }
+
+        writer.max_cols = mc;
+        writer.max_rows = mr;
+
         writer.redraw_from_buf();
     }
 }

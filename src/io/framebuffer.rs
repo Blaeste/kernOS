@@ -26,9 +26,9 @@ static mut DIRTY_X2:    u32 = 0;    // coin bas gauche X
 static mut DIRTY_Y2:    u32 = 0;    // coin bas droit Y
 
 /// Couleur du texte par défaut
-const FG:                   u32 = 0xFFFFFF; // blanc
-const TEXT_MAX_COLS:        usize = 100;
-const TEXT_MAX_ROWS:        usize = 200;
+const FG:                       u32 = 0xFFFFFF; // blanc
+pub const TEXT_MAX_COLS:        usize = 100;
+pub const TEXT_MAX_ROWS:        usize = 200;
 
 /// Palette ANSI 16 couleurs (0-7 normales, 8-15 vives). Format 0xRRGGBB.
 const ANSI_PALETTE: [u32; 16] = [

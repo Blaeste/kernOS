@@ -85,7 +85,8 @@ pub fn on_click(mx: i32, my: i32) -> bool {
         // Bouton launcher ; lance l'ELF hello
         let launch_x = (sw - 156) as i32;
         let launch_y = (sh - TASKBAR_H + (TASKBAR_H - BTN_H) / 2) as i32;
-        if mx >= launch_y && my < launch_y + BTN_H as i32 {
+        if mx >= launch_x && mx < launch_x + LAUNCH_W as i32
+            && my >= launch_y && my < launch_y + BTN_H as i32 {
             crate::userspace::spawn_elf();
             return false;
         }
