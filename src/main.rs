@@ -192,6 +192,11 @@ pub extern "C" fn _start(multiboot_addr: u64) -> ! {
     io::framebuffer::bind_writer_to_win(term_idx);
 
     ui::window::create_window(420, 10, 400, 800, "Fichiers");
+
+    // Fenêtre éditeur (index 2) — créée cachée, affichée par la commande `edit`
+    let ed_idx = ui::window::create_window(120, 60, 520, 640, "Editeur");
+    unsafe { (*addr_of_mut!(ui::window::WINDOWS))[ed_idx].visible = false; }
+
     ui::window::draw_all();
     ui::taskbar::draw();
     ui::filewin::draw();

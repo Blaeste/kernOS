@@ -131,7 +131,7 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 - [x] Terminal ANSI — `\e[…m` parsé dans `FbWriter` : 16 couleurs fg + bold, reset. Commande `colors` ✅
 - [x] Fenêtres redimensionnables — drag du coin bas-droit (poignée visible), clamp mini/écran, re-flow du writer Terminal (max_cols/rows clampés au text_buf, curseur réaligné) ✅
 - [x] Fixes UI au passage — clic en front montant (plus de spam launcher → crash), curseur sans fantôme en resize
-- [ ] Éditeur de texte intégré — ouvre un fichier KFS, édite, `Ctrl+S` sauvegarde
+- [x] Éditeur de texte intégré — `edit <fichier>` (fenêtre dédiée), insert/backspace/newline, curseur, **Ctrl+S** sauve sur KFS, **Escape/Ctrl+Q** ferme. Routage clavier vers la fenêtre focus (Ctrl tracké) ✅
 - [x] Launcher — bouton `> hello` dans la taskbar → clic lance l'ELF en ring 3 (+ fix flicker : les clics taskbar ne forcent plus de redraw plein écran) ✅
 
 ---

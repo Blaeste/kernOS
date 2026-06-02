@@ -88,10 +88,15 @@ pub enum Layout { Qwerty, Azerty }
 pub static mut LAYOUT: Layout = Layout::Qwerty;
 
 static mut SHIFT_HELD: bool = false;
+static mut CTRL_HELD:  bool = false;
 static mut E0_PENDING: bool = false;
 
 pub fn on_key(scancode: u8) {
-    //
+    
+    // Ctrl gauche : appuyé (0x1D) / relâché (0x9D)
+    if scancode == 0x1D { unsafe { CTRL_HELD = true; } return; }
+    if scancode == 0x9D { unsafe { CTRL_HELD = false; } return; }
+
     if scancode == 0xE0 {
         unsafe { E0_PENDING = true; }
         return;
@@ -130,6 +135,10 @@ pub fn on_key(scancode: u8) {
         return;
     }
 
+    // Ctrl gauche : appuyé (0x1D) / relâché (0x9D)
+    if scancode == 0x1D { unsafe { CTRL_HELD = true;  } return; }
+    if scancode == 0x9D { unsafe { CTRL_HELD = false; } return; }
+
     // Ignorer les relâchements
     if scancode >= 0x80 {
         return;
@@ -145,14 +154,28 @@ pub fn on_key(scancode: u8) {
             }
         };
 
-        if ch == 27 || ch == 0 {
+        if ch == 0 {
             return; // Escape et touches speciales -> ignorer
         }
 
         let focused = crate::ui::window::get_focused_win();
-        let bound = unsafe { (*addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win };
-        if focused == bound {
-            crate::shell::on_char(ch);
+        let in_editor = crate::ui::editor::is_open() && focused == crate::ui::editor::EDITOR_WIN_IDX;
+
+        if ch == 27 {
+
+            if in_editor { crate::ui::editor::on_key(ch, false); }
+            return ;
+        }
+
+        if in_editor {
+
+            crate::ui::editor::on_key(ch, unsafe { CTRL_HELD });
+        } else {
+            
+            let bound = unsafe { (*addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win };
+            if focused == bound {
+                crate::shell::on_char(ch);
+            }
         }
     }
 }

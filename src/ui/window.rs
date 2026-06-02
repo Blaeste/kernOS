@@ -134,9 +134,6 @@ fn draw_one(win: &Window, idx: usize) {
 
     // Contenu
     fill_rect(x + BORDER, y + BORDER + TITLE_H, w - 2 * BORDER, h - 2 * BORDER - TITLE_H, WIN_CONTENT);
-
-    // Poignée de redimensionnement (dessinée APRÈS le contenu pour rester visible)
-    fill_rect(x + w - BORDER - 10, y + h - BORDER - 10, 10, 10, WIN_BORDER);
 }
 
 /// Dessine toutes les fenêtres (z-order = odre du tableau)
@@ -150,8 +147,17 @@ pub fn draw_all() {
             if idx == crate::ui::filewin::FILE_WIN_IDX {
                 crate::ui::filewin::draw();
             }
+            if idx == crate::ui::editor::EDITOR_WIN_IDX {
+                crate::ui::editor::draw();
+            }
             if idx == bound {
                 redraw_writer_if_visible();
+            }
+            // Poignée de resize APRÈS le contenu (filewin/editor/writer le repeignent
+            // sinon ils écrasent la poignée).
+            let gw = &WINDOWS[idx];
+            if gw.visible {
+                fill_rect(gw.x + gw.w - BORDER - 10, gw.y + gw.h - BORDER - 10, 10, 10, WIN_BORDER);
             }
             i += 1;
         }

@@ -166,6 +166,7 @@ fn execute(cmd: &[u8]) {
             "  run [nom]   - lance un ELF (embarque, ou depuis KFS si nom)\n",
             "  install nom - copie l'ELF hello dans KFS sous <nom>\n",
             "  colors      - demo des couleurs ANSI\n",
+            "  edit nom    - edite un fichier KFS (etape 2: Ctrl+S sauve)\n",
         ));
     }
 
@@ -392,6 +393,14 @@ fn execute(cmd: &[u8]) {
     else if eq(name, b"colors") {
         println!("\x1b[31mrouge\x1b[0m \x1b[32mvert\x1b[0m \x1b[33mjaune\x1b[0m \x1b[34mbleu\x1b[0m \x1b[35mmagenta\x1b[0m \x1b[36mcyan\x1b[0m");
         println!("\x1b[1;31mrouge vif\x1b[0m \x1b[1;33mjaune vif\x1b[0m \x1b[91mrouge clair\x1b[0m \x1b[92mvert clair\x1b[0m");
+    }
+
+    else if eq(name, b"edit") {
+        if args.is_empty() {
+            println!("usage: edit <fichier>");
+        } else {
+            crate::ui::editor::open(args);
+        }
     }
 
     else if name.is_empty() {
