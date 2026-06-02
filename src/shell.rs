@@ -165,6 +165,7 @@ fn execute(cmd: &[u8]) {
             "  run         - lance un ELF en ring 3\n",
             "  run [nom]   - lance un ELF (embarque, ou depuis KFS si nom)\n",
             "  install nom - copie l'ELF hello dans KFS sous <nom>\n",
+            "  colors      - demo des couleurs ANSI\n",
         ));
     }
 
@@ -386,6 +387,11 @@ fn execute(cmd: &[u8]) {
         } else {
             crate::userspace::install_hello(args);
         }
+    }
+
+    else if eq(name, b"colors") {
+        println!("\x1b[31mrouge\x1b[0m \x1b[32mvert\x1b[0m \x1b[33mjaune\x1b[0m \x1b[34mbleu\x1b[0m \x1b[35mmagenta\x1b[0m \x1b[36mcyan\x1b[0m");
+        println!("\x1b[1;31mrouge vif\x1b[0m \x1b[1;33mjaune vif\x1b[0m \x1b[91mrouge clair\x1b[0m \x1b[92mvert clair\x1b[0m");
     }
 
     else if name.is_empty() {

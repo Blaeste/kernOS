@@ -30,6 +30,14 @@ const FG:                   u32 = 0xFFFFFF; // blanc
 const TEXT_MAX_COLS:        usize = 100;
 const TEXT_MAX_ROWS:        usize = 200;
 
+/// Palette ANSI 16 couleurs (0-7 normales, 8-15 vives). Format 0xRRGGBB.
+const ANSI_PALETTE: [u32; 16] = [
+    0x000000, 0xAA0000, 0x00AA00, 0xAA5500,     // noir,    rouge,      vert,   jaune
+    0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA,     // bleu,    magenta,    cyan,   blanc,
+    0x555555, 0xFF5555, 0x55FF55, 0xFFFF55,     // versions vives
+    0x5555FF, 0xFF55FF, 0x55FFFF, 0xFFFFFF,
+];
+
 /// Writer framebuffer - gère un curseur texte et dessine avec la police bitmap.
 pub struct FbWriter {
     pub row:         u32,
@@ -42,6 +50,10 @@ pub struct FbWriter {
     pub bg:          u32,
     pub bound_win:   usize,
     pub view_offset: u32,
+    pub fg:          u32,    // couleur de texte courante (modifiable via ANSI)
+    pub ansi_state:  u8,     // 0=normal, 1=ESC vu, 2=dans CSI \e[
+    pub ansi_acc:    u32,    // paramètre numérique en cours d'accumulation
+    pub ansi_bold:   bool,   // gras → couleurs vives (30-37 → 90-97)
 }
 
 /// Initialise le framebuffer avec le sinfos du tag Multiboot2.
@@ -215,6 +227,20 @@ pub fn draw_string(x: u32, y: u32, s: &str, fg: u32, bg: u32) {
 impl FbWriter {
     /// Ecrit un octet (caractère) à la position courante du curseur.
     pub fn write_byte(&mut self, byte: u8) {
+
+        // ── Séquences ANSI \e[...m ────────────────────────────
+        if self.ansi_state != 0 {
+
+            self.ansi_byte(byte);
+            return;
+        }
+
+        if byte == 0x1b {    // ESC : début de séquence
+
+            self.ansi_state = 1;
+            return;
+        }
+
         if self.view_offset > 0 {
             self.view_offset = 0;
             self.redraw_from_buf();
@@ -230,7 +256,7 @@ impl FbWriter {
             byte => {
                 let x = self.x_origin + self.col * 8;       // position pixel X
                 let y = self.y_origin + self.row * 16;      // position pixel Y
-                draw_char(x, y, byte, FG, self.bg);
+                draw_char(x, y, byte, self.fg, self.bg);
                 let buf_row = (TEXT_MAX_ROWS - self.max_rows as usize) + self.row as usize;
                 self.text_buf[buf_row][self.col as usize] = byte;
                 self.col += 1;
@@ -302,6 +328,44 @@ impl FbWriter {
         self.text_buf = [[b' '; TEXT_MAX_COLS]; TEXT_MAX_ROWS];
     }
 
+    /// Alimente le parser ANSI (appelé quand ansi_state != 0).
+    fn ansi_byte(&mut self, byte: u8) {
+
+        match self.ansi_state {
+
+            1 => {
+                // On attend '[' juste après ESC, sinon on abandonne.
+                if byte == b'[' { self.ansi_state = 2; self.ansi_acc = 0; }
+                else            { self.ansi_state = 0; }
+            }
+            2 => match byte {
+                b'0'..=b'9' => self.ansi_acc = self.ansi_acc * 10 + (byte - b'0') as u32,
+                b';'        => { self.apply_sgr(self.ansi_acc); self.ansi_acc = 0; }
+                b'm'        => { self.apply_sgr(self.ansi_acc); self.ansi_acc = 0; self.ansi_state = 0; }
+                _           => self.ansi_state = 0, // H, J, K.. non gérés 
+            },
+            _ => self.ansi_state = 0,
+        }
+    }
+
+    /// Applique un code SGR à la couleur de texte courante.
+    fn apply_sgr(&mut self, code: u32) {
+
+        match code {
+
+            0       => { self.fg = FG; self.ansi_bold = false; }                        // reset
+            1       => self.ansi_bold = true,                                           // gras -> vif
+            22      => self.ansi_bold = false,                                          // gras off
+            30..=37 => {
+                let idx = (code - 30) as usize + if self.ansi_bold { 8 } else { 0 };
+                self.fg = ANSI_PALETTE[idx];
+            }
+            39      => self.fg = FG,                                                    // couleur par défault
+            90..=97 => self.fg = ANSI_PALETTE[(code - 90) as usize + 8],
+            _       => {}                                                               // bg & co ignorés (v1)
+        }
+    }
+
     /// Redessin depusi le buffer text
     pub fn redraw_from_buf(&self) {
         let base = (TEXT_MAX_ROWS - self.max_rows as usize).saturating_sub(self.view_offset as usize);
@@ -360,6 +424,10 @@ pub static mut FB_WRITER: FbWriter = FbWriter {
     bg: crate::ui::theme::DESKTOP_BG,
     bound_win: usize::MAX,
     view_offset: 0,
+    fg: FG,
+    ansi_state: 0,
+    ansi_acc: 0,
+    ansi_bold: false,
 };
 
 /// Configure le FB_WRITER pour écrire dans la zone de contenu d'une fentre

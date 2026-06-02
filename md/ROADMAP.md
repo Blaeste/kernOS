@@ -127,8 +127,8 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 ## Phase G — Shell et UI
 > Rendre l'OS utilisable au quotidien.
 
-- [ ] Shell amélioré — pipes (`|`), redirections (`>`, `<`), variables `$VAR`
-- [ ] Terminal ANSI — couleurs 16, bold, reset (`\e[31m` etc.)
+- [ ] Shell amélioré — pipes (`|`), redirections (`>`, `<`), variables `$VAR` (bloqué : besoin fork + stdin)
+- [x] Terminal ANSI — `\e[…m` parsé dans `FbWriter` : 16 couleurs fg + bold, reset. Commande `colors` ✅
 - [ ] Fenêtres redimensionnables — coin drag resize
 - [ ] Éditeur de texte intégré — ouvre un fichier KFS, édite, `Ctrl+S` sauvegarde
 - [ ] Launcher — clic sur icône → `exec` d'un ELF
