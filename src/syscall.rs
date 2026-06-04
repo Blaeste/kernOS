@@ -158,14 +158,22 @@ fn sys_read(fd: u64, buf_ptr: u64, len: u64) -> u64 {
 
         unsafe {
             let cur = *addr_of!(CURRENT);
-            if crate::io::stdin::available() == 0 {
 
-                // Bloque : marque la tache + enregistre quiq ttend
-                (*addr_of_mut!(TASKS))[cur].stdin_wait = true;
-                crate::io::stdin::WAITING_TASK = cur;
+            // Annonce l'attente AVANT de tester le buffer : si un '\n' arrive
+            // entre-temps, le clavier verra WAITING_TASK et nous réveillera
+            // (pas de wakeup manqué). Si des données sont déjà là, on saute
+            // le blocage et on nettoie l'état d'attente.
+            (*addr_of_mut!(TASKS))[cur].stdin_wait = true;
+            crate::io::stdin::WAITING_TASK = cur;
+
+            if crate::io::stdin::available() == 0 {
                 core::arch::asm!("int 0x20", options(nostack));
-                // ici wake up donnees dispo
             }
+
+            // Réveillé (ou données déjà présentes) : nettoie l'état d'attente
+            (*addr_of_mut!(TASKS))[cur].stdin_wait = false;
+            crate::io::stdin::WAITING_TASK = usize::MAX;
+
             let buf = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, len as usize);
             return crate::io::stdin::read(buf) as u64;
         }

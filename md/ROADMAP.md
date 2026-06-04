@@ -61,7 +61,7 @@ Le kernel est un vrai OS desktop userspace : ELF isolé en ring 3, 10 syscalls, 
 - [x] CR3 par processus — `Task.cr3` + `paging::new_cr3()` — PDPT[0] partagé (kernel 0-1 Go), PDPT[1] isolé (user 1-2 Go)
 - [x] Switch CR3 au context switch — `mov cr3, [{nc}]` dans `irq_timer_stub`, `NEXT_CR3` écrit par `schedule()`
 - [x] ELF user relogé à 0x40000000 (1 Go) — hors de la zone kernel, isolation réelle
-- [ ] Libération à task_exit — free pages user + PML4 (Phase D, nécessite walk PT)
+- [x] Libération à task_exit — `paging::free_cr3()` walk PDPT[1] (pages user + PTs + PD) + PML4/PDPT propres ; plus de leak de frames à chaque `run` ✅
 - [x] Tester l'isolation — `run` charge l'ELF dans son CR3 propre, kernel CR3 intact ✅
 
 **Milestone :** un process crashé ne corrompt pas les autres.

@@ -525,3 +525,40 @@ pub fn translate_in(cr3: u64, virt: u64) -> Option<u64> {
 
     Some((pt[i1] & ADDR_MASK) + (virt & 0xFFF))
 }
+
+/// Libère un espace d'adressage isolé créé par new_cr3() (appelé à task_exit).
+///
+/// Ne libère QUE le sous-arbre usr (PDPT[1] = zone 1-2 Go : PD, PTs, pages),
+/// puis la PDPT et la PML4 propres au processus. Les tables kernel partagées
+/// (PDPT[0] = identity map, PDPT[2..512]) ne sont JAMAIS touchées.
+///
+/// ⚠️ À appeler seulement sur un CR3 de processus (pas le boot_cr3), et juste
+/// avant le reschedule : les frames sont marqués libre mais restent lisibles
+/// (contenu intact) tant qu'aucune allocation ne survient avant le switch CR3.
+pub fn free_cr3(cr3: u64) {
+    let pml4 = table_at(cr3 & ADDR_MASK);
+    let pdpt_phys = pml4[0] & ADDR_MASK;
+    let pdpt = table_at(pdpt_phys);
+
+    // Zone user = PDPT[1]. On descend et on libère tout son sous-arbre.
+    if pdpt[1] & PRESENT != 0 && pdpt[1] & HUGE_PAGE == 0 {
+        let pd_phys = pdpt[1] & ADDR_MASK;
+        let pd = table_at(pd_phys);
+        for i in 0..512 {
+            if pd[i] & PRESENT != 0 && pd[i] & HUGE_PAGE == 0 {
+                let pt_phys = pd[i] & ADDR_MASK;
+                let pt = table_at(pt_phys);
+                for j in 0..512 {
+                    if pt[j] & PRESENT != 0 {
+                        frame::free(pt[j] & ADDR_MASK);   // page user (ELF, pile…)
+                    }
+                }
+                frame::free(pt_phys);                     // la PT
+            }
+        }
+        frame::free(pd_phys);                             // la PD user
+    }
+
+    frame::free(pdpt_phys);                               // la PDPT propre
+    frame::free(cr3 & ADDR_MASK);                         // la PML4 propre
+}

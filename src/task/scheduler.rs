@@ -195,6 +195,22 @@ pub fn task_exit() {
             }
         }
 
+        // Si la tâche qui meurt attendait stdin, libère le clavier
+        // (sinon il resterait routé vers le stdin d'un process mort).
+        if crate::io::stdin::WAITING_TASK == cur {
+            crate::io::stdin::WAITING_TASK = usize::MAX;
+        }
+
+        // Libère les frames du process (sauf le kernel qui partage le boot CR3).
+        // Sûr ici : aucune allocation entre free_cr3() et le int 0x20 qui
+        // bascule sur le CR3 kernel, donc les frames libérés ne sont pas réutilisés
+        // tant qu'ils sont encore l'espace d'adressage actif.
+        let dying_cr3 = (*addr_of!(TASKS))[cur].cr3;
+        let kernel_cr3 = (*addr_of!(TASKS))[0].cr3;
+        if dying_cr3 != 0 && dying_cr3 != kernel_cr3 {
+            crate::mem::paging::free_cr3(dying_cr3);
+        }
+
         (*addr_of_mut!(TASKS))[cur].active = false;
         // Force un reschedule immédiat
         core::arch::asm!("int 0x20", options(nostack));

@@ -154,7 +154,11 @@ pub fn on_key(scancode: u8) {
             }
         };
 
-        // Si un process userpace attend stdin, on lui route le caractere
+        // Touches spéciales (keypad, alt…) mappées à 0 → on ignore partout
+        // (sinon elles seraient poussées comme octet 0 dans stdin).
+        if ch == 0 { return; }
+
+        // Si un process userspace attend stdin, on lui route le caractère
         let stdin_pending = unsafe { crate::io::stdin::WAITING_TASK } != usize::MAX;
         if stdin_pending {
 
