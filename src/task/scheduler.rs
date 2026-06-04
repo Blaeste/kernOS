@@ -36,6 +36,7 @@ pub struct Task {
     pub cr3:            u64,
     pub fds:            [FileDesc; MAX_FDS],
     pub waiting_for:    usize,                  // usize::MAX = pas en attente
+    pub stdin_wait:     bool,
 }
 
 /// Tableau de toutes les tâches (slots fixes)
@@ -46,6 +47,7 @@ pub static mut TASKS: [Task; MAX_TASKS] = [const { Task {
     cr3:            0,
     fds:            [const { FileDesc { active: false, kind: 0, name: [0; 28], pos: 0 } }; MAX_FDS],
     waiting_for:    usize::MAX,
+    stdin_wait:     false,
 } }; MAX_TASKS];
 
 /// CR3 à charger lors du prochain context switch - écrit par schedule(),
@@ -166,10 +168,8 @@ pub fn schedule(old_rsp: u64) -> u64 {
 
                 // Runnable si : pas en attente OU la tâche attendue a terminé
                 let wf = t.waiting_for;
-                if wf == usize::MAX || !(*addr_of!(TASKS))[wf].active {
-
-                    break;
-                }
+                let runnable = (wf == usize::MAX || !(*addr_of!(TASKS))[wf].active) && !t.stdin_wait;
+                if runnable { break; }
             }
         }
 
@@ -194,7 +194,7 @@ pub fn task_exit() {
                 (*addr_of_mut!(TASKS))[i].waiting_for = usize::MAX;
             }
         }
-        
+
         (*addr_of_mut!(TASKS))[cur].active = false;
         // Force un reschedule immédiat
         core::arch::asm!("int 0x20", options(nostack));

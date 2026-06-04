@@ -92,7 +92,7 @@ static mut CTRL_HELD:  bool = false;
 static mut E0_PENDING: bool = false;
 
 pub fn on_key(scancode: u8) {
-    
+
     // Ctrl gauche : appuyé (0x1D) / relâché (0x9D)
     if scancode == 0x1D { unsafe { CTRL_HELD = true; } return; }
     if scancode == 0x9D { unsafe { CTRL_HELD = false; } return; }
@@ -122,7 +122,7 @@ pub fn on_key(scancode: u8) {
             _ => {}
         }
         return;
-    }   
+    }
 
     // Shift appuyé (0x2A=gauche, 0x36=droite)
     if scancode == 0x2A || scancode == 0x36 {
@@ -147,12 +147,40 @@ pub fn on_key(scancode: u8) {
     // Convertir en caractère
     if (scancode as usize) < QWERTY_NORMAL.len() {
 
-        let ch = unsafe { 
+        let ch = unsafe {
             match LAYOUT {
                 Layout::Qwerty => if SHIFT_HELD { QWERTY_SHIFT[scancode as usize] } else { QWERTY_NORMAL[scancode as usize] },
                 Layout::Azerty => if SHIFT_HELD { AZERTY_SHIFT[scancode as usize] } else { AZERTY_NORMAL[scancode as usize] },
             }
         };
+
+        // Si un process userpace attend stdin, on lui route le caractere
+        let stdin_pending = unsafe { crate::io::stdin::WAITING_TASK } != usize::MAX;
+        if stdin_pending {
+
+            if ch == 8 {
+                // Backspace : efface du buffer + echo
+                if crate::io::stdin::pop_last() {
+                    unsafe {
+                        (*addr_of_mut!(crate::io::framebuffer::FB_WRITER)).backspace();
+                        crate::io::framebuffer::swap_buffers();
+                    }
+                }
+            }
+
+            else if ch == b'\n' {
+                // Retour ligne
+                crate::io::stdin::push(b'\n');
+                crate::println!();
+                crate::io::stdin::wake_waiting();
+            }
+
+            else {
+                crate::io::stdin::push(ch);
+                crate::print!("{}", ch as char);
+            }
+            return;
+        }
 
         if ch == 0 {
             return; // Escape et touches speciales -> ignorer
@@ -171,7 +199,7 @@ pub fn on_key(scancode: u8) {
 
             crate::ui::editor::on_key(ch, unsafe { CTRL_HELD });
         } else {
-            
+
             let bound = unsafe { (*addr_of!(crate::io::framebuffer::FB_WRITER)).bound_win };
             if focused == bound {
                 crate::shell::on_char(ch);

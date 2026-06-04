@@ -75,6 +75,14 @@ pub extern "C" fn _start() -> ! {
         close(fd_r);
     }
 
+    // ── Test stdin ─────────────────────────────────────────────────────────
+    write(b"Ton nom ? ");
+    let mut buf = [0u8; 64];
+    let name = libkern::readline(&mut buf);
+    write(b"Bonjour, ");
+    write(name);
+    write(b" !\n");
+
     exit(0);
 }
 

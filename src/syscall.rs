@@ -120,7 +120,7 @@ fn sys_open(path_ptr: u64, path_len: u64) -> u64 {
             let dst = &mut fds[i].name;
             for j in 0..len { dst[j] = name_slice[j]; }
             for j in len..28 { dst[j] = 0; }
-            return i as u64; 
+            return i as u64;
         }
     }
     u64::MAX // plus de slots
@@ -145,7 +145,7 @@ fn sys_close(fd: u64) -> u64 {
     }
 
     fds[idx].active = false;
-    0    
+    0
 }
 
 /// syscall 6: read(fd, buf_ptr, len) -> octet lus
@@ -154,7 +154,23 @@ fn sys_close(fd: u64) -> u64 {
 /// fd 3..7         : lit depusi KFS à partir de la position courante (fd.pos).
 fn sys_read(fd: u64, buf_ptr: u64, len: u64) -> u64 {
 
-    if fd == 0 { return 0 }
+    if fd == 0 {
+
+        unsafe {
+            let cur = *addr_of!(CURRENT);
+            if crate::io::stdin::available() == 0 {
+
+                // Bloque : marque la tache + enregistre quiq ttend
+                (*addr_of_mut!(TASKS))[cur].stdin_wait = true;
+                crate::io::stdin::WAITING_TASK = cur;
+                core::arch::asm!("int 0x20", options(nostack));
+                // ici wake up donnees dispo
+            }
+            let buf = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, len as usize);
+            return crate::io::stdin::read(buf) as u64;
+        }
+    }
+
     if fd < 3 || fd as usize >= MAX_FDS { return u64::MAX; }
 
     let idx = fd as usize;

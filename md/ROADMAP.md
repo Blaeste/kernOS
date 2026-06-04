@@ -1,8 +1,8 @@
 # KernOS — Roadmap
 
-## État actuel — Phases A→D complètes
+## État actuel — Phases A→G en cours (F complète, G partielle)
 
-Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, filesystem multi-blocs.
+Le kernel est un vrai OS desktop userspace : ELF isolé en ring 3, 10 syscalls, IPC (pipes/wait/kill), libkern, UI graphique complète avec éditeur intégré.
 
 ### Fait ✅
 
@@ -12,14 +12,14 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 | VGA + print!/println! | Affichage texte kernel |
 | IDT + PIC + IRQ | Interruptions CPU complètes |
 | Clavier PS/2 (AZERTY/QWERTY) + Souris | Input complet |
-| Shell interactif | Parsing commandes |
+| Shell interactif | Parsing commandes, 25+ commandes |
 | Free List allocator 256 Ko | alloc + free + fusion |
 | Timer PIT 100 Hz | Base temps kernel |
 | Frame allocator bitmap | Gestion physique de la RAM |
 | Pagination 4 niveaux | map / unmap / translate / map_user_at |
 | Multitâche préemptif | Round-robin, context switch, spawn |
 | Framebuffer 1080p | Double buffering, dirty rect |
-| Window manager | Drag & drop, z-order, focus |
+| Window manager | Drag & drop, z-order, focus, redimensionnable |
 | Taskbar + horloge | UI desktop basique |
 | Driver ATA | Lecture/écriture disque |
 | KFS v2 | 64 fichiers, FAT chaînée, 64 Ko max, read_at |
@@ -28,8 +28,15 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 | Debug amélioré | Port 0xE9, GPF/PF avec RIP/CR2 |
 | ELF loader (Phase A) | parse PT_LOAD, map_user_at, copy + zero BSS |
 | CR3 par processus (Phase B) | PDPT[1] isolé, switch dans irq_timer_stub |
-| 7 syscalls (Phase C) | write/exit/getpid/yield/open/read/close + fd table |
+| 10 syscalls (Phase C+F) | write/exit/getpid/yield/open/read/close/kill/wait/pipe + fd table |
 | KFS v2 (Phase D) | FAT chaînée, 64 entrées, read_at positionnée |
+| libkern (Phase E) | crate no_std userspace, bump allocator 16 Ko, Vec/String/Box |
+| IPC — Pipes + Signaux (Phase F) | pipe circulaire 256 o, wait(pid), kill(pid,9) |
+| Terminal ANSI (Phase G) | \e[…m : 16 couleurs fg + bold, commande colors |
+| Fenêtres redimensionnables (Phase G) | drag coin bas-droit, clamp, re-flow writer |
+| Éditeur de texte (Phase G) | edit <fichier>, Ctrl+S, Escape, routage focus clavier |
+| Launcher taskbar (Phase G) | bouton > hello → exec ring 3 |
+| stdin bloquant (Phase G) | read(0) line-buffered, readline() libkern, routage clavier |
 
 ---
 
@@ -72,7 +79,7 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 - [x] Fix syscall_stub — `mov [rsp+112], rax` préserve la valeur de retour
 - [x] fd table dans Task — `[FileDesc; 8]` (name + pos par fichier ouvert)
 - [x] user/hello teste tous les syscalls — write/pid/yield/open/read/close ✅
-- [ ] `read(0, buf, len)` stdin — bloquant, nécessite Phase F (IPC)
+- [x] `read(0, buf, len)` stdin — bloquant, line-buffered, réveillé sur '\n' ✅
 - [ ] `exec(path)` — remplace le processus par un ELF (Phase D/E)
 - [ ] `sleep(ms)` — attente temporisée
 
@@ -127,7 +134,8 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 ## Phase G — Shell et UI
 > Rendre l'OS utilisable au quotidien.
 
-- [ ] Shell amélioré — pipes (`|`), redirections (`>`, `<`), variables `$VAR` (bloqué : besoin fork + stdin)
+- [x] stdin bloquant — `src/io/stdin.rs` ring buffer 256 o, line-buffered, `readline()` dans libkern ✅
+- [ ] Shell amélioré — pipes (`|`), redirections (`>`, `<`), variables `$VAR` (fork nécessaire)
 - [x] Terminal ANSI — `\e[…m` parsé dans `FbWriter` : 16 couleurs fg + bold, reset. Commande `colors` ✅
 - [x] Fenêtres redimensionnables — drag du coin bas-droit (poignée visible), clamp mini/écran, re-flow du writer Terminal (max_cols/rows clampés au text_buf, curseur réaligné) ✅
 - [x] Fixes UI au passage — clic en front montant (plus de spam launcher → crash), curseur sans fantôme en resize
@@ -155,9 +163,8 @@ Le kernel est un vrai OS userspace : ELF isolé en ring 3, syscalls complets, fi
 ✅ FAIT    →  D  KFS v2
 ✅ FAIT    →  E  libkern (user library)
 ✅ FAIT    →  F  IPC & Signaux
-Maintenant →  G  Shell / UI
-            →  H  Réseau  ← quand tout le reste est solide
+✅ FAIT    →  G  Shell / UI  (terminal ANSI, resize, éditeur, launcher — shell pipes manquants)
+Maintenant →  H  Réseau  ← quand tout le reste est solide
 ```
 
-**Le vrai déblocage A + B + C + D est accompli** : ELF isolé, syscalls complets, filesystem
-multi-blocs. La prochaine étape (libkern) rend le développement userspace confortable.
+**Prochaine priorité** : Phase H (réseau VirtIO) ou finir Phase G (shell pipes `|`, redirections `>`, stdin bloquant). La base userspace est solide.

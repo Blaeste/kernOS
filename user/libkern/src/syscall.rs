@@ -25,6 +25,9 @@
     4  open(path, len)        → fd           fd 3..7 = KFS, MAX = erreur
     5  close(fd)              → 0 / MAX
     6  read(fd, buf, len)     → octets lus   avance fd.pos
+    7  kill(pid, sig)          → 0 / MAX
+    8  wait(pid)               → 0            bloque jusqu'à exit
+    9  pipe()                  → (fd_r<<32)|fd_w
 */
 
 // ── Wrappers syscall ──────────────────────────────────────────────────────
@@ -80,7 +83,7 @@ pub fn close(fd: u64)                       { unsafe { sys(5, fd, 0, 0); } }
 
 /// Lit jusqu'à buf.len() octets depuis fd à partir de la position courante.
 /// Retourne le nombre d'octets effectivement lus (0 = fin de fichier).
-pub fn read(fd: u64, buf: &mut [u8]) -> u64 { unsafe { sys(6, fd, buf.as_ptr() as u64, buf.len() as u64) } }
+pub fn read(fd: u64, buf: &mut [u8]) -> u64 { unsafe { sys(6, fd, buf.as_mut_ptr() as u64, buf.len() as u64) } }
 
 
 // ── Utilitaires d'affichage ───────────────────────────────────────────────
@@ -97,8 +100,8 @@ pub fn print_u64(mut n: u64) {
     while n > 0  {
 
         i -= 1;
-        buf[i] = b'0' + (n % 10) as u8; 
-        n /= 10; 
+        buf[i] = b'0' + (n % 10) as u8;
+        n /= 10;
     }
 
     write(&buf[i..]);
@@ -122,4 +125,13 @@ pub fn pipe() -> (u64, u64) {
     if p == u64::MAX { return (u64::MAX, u64::MAX); }
 
     (p >> 32, p & 0xFFFF_FFFF)
+}
+
+/// Lit une ligne depuis stdin (bloquant jusqu'au '\n').
+/// Retourne le slice rempli sans le '\n' terminal.
+pub fn readline(buf: &mut [u8]) -> &[u8] {
+
+    let n = read(0, buf) as usize;
+    // enleve le '\n' final si present
+    if n > 0 && buf[n - 1] == b'\n' { &buf[..n - 1] } else { &buf[..n] }
 }

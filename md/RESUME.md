@@ -42,9 +42,10 @@ Le nom vient de l'alsacien : "Kern" = noyau.
 10. ~~**Système de fichiers**~~ ✅ — KFS v2 : FAT chaînée, 64 fichiers, 64 Ko max
 11. ~~**Stack graphique**~~ ✅ — Framebuffer 1080p, double buffering, fenêtres, drag & drop
 12. ~~**Userspace ring 3**~~ ✅ — Phase A : ELF loader, Phase B : isolation CR3, Phase C : 7 syscalls
-13. **libkern** — crate userspace partagée (wrappers syscalls, allocateur user)
-14. **IPC & Signaux** — pipes, wait, fork
-15. **Shell amélioré + Réseau** — pipes, ANSI, VirtIO
+13. ~~**libkern**~~ ✅ — crate no_std userspace, bump allocator 16 Ko, Vec/String/Box
+14. ~~**IPC & Signaux**~~ ✅ — pipes circulaires, wait(pid), kill(pid,9), 10 syscalls au total
+15. ~~**Shell amélioré + UI**~~ ✅ (partiel) — terminal ANSI 16 couleurs, fenêtres redimensionnables, éditeur intégré, launcher taskbar. Reste : pipes shell `|`, stdin bloquant
+16. **Réseau** — VirtIO net, UDP, TCP, HTTP
 
 ## Architecture du Code
 
@@ -55,10 +56,11 @@ src/
 ├── interrupt.rs       IDT, handlers exceptions + IRQ stubs naked
 ├── multiboot.rs       parsing tags Multiboot2 (memory map, framebuffer)
 ├── shell.rs           mini-shell (buffer, commandes, 25+ commandes)
-├── syscall.rs         7 syscalls : write/exit/getpid/yield/open/read/close
+├── syscall.rs         10 syscalls : write/exit/getpid/yield/open/read/close/kill/wait/pipe (read(0) bloquant)
+├── ipc.rs             pipes circulaires 256 o (jusqu'à 4), alloc_pipe/read/write
 ├── gdt.rs             GDT + TSS (segments kernel/user, rsp0)
 ├── elf.rs             ELF64 loader (PT_LOAD, map_user_at, BSS zero)
-├── userspace.rs       spawn_user / spawn_elf (ring 3)
+├── userspace.rs       spawn_user / spawn_elf / spawn_elf_from_kfs (ring 3)
 ├── mem/
 │   ├── allocator.rs   free-list allocator 256Ko
 │   ├── frame.rs       frame allocator bitmap (pages 4Ko)
@@ -77,11 +79,13 @@ src/
 ├── io/
 │   ├── vga.rs         affichage VGA texte
 │   ├── framebuffer.rs framebuffer 1080p, double buffering, PRINT_LOCK
-│   └── font.rs        police bitmap 8×16
+│   ├── font.rs        police bitmap 8×16
+│   └── stdin.rs       ring buffer 256 o line-buffered, wake sur '\n'
 ├── ui/
-│   ├── window.rs      window manager (z-order, drag, focus)
-│   ├── taskbar.rs     barre des tâches + horloge
-│   └── filewin.rs     fenêtre fichiers KFS cliquable
+│   ├── window.rs      window manager (z-order, drag, resize, focus)
+│   ├── taskbar.rs     barre des tâches + horloge + launcher
+│   ├── filewin.rs     fenêtre fichiers KFS cliquable
+│   └── editor.rs      éditeur de texte (edit <f>, Ctrl+S, Escape)
 └── klib/              utilitaires no_std (string, mem, cmp, debug)
 
 user/
@@ -91,14 +95,12 @@ user/
 ## Commandes d'Installation
 
 ```bash
-# Installer Rust
-winget install Rustlang.Rustup
-
-# Installer QEMU
-winget install SoftwareFreedomConservancy.QEMU
+# Linux (Debian/Ubuntu)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+sudo apt install qemu-system-x86 nasm grub-pc-bin xorriso
 
 # Configurer Rust pour l'OS dev
-rustup default nightly           # Version expérimentale (features OS dev)
+# (rust-toolchain.toml à la racine force déjà nightly automatiquement)
 rustup component add rust-src    # Sources pour recompiler les libs de base
 rustup target add x86_64-unknown-none  # Cible bare-metal sans OS
 ```
