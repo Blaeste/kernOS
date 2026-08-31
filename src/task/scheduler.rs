@@ -177,6 +177,14 @@ pub fn schedule(old_rsp: u64) -> u64 {
         *addr_of_mut!(CURRENT) = next;
         // Informe le stub quel CR3 charger lors du switch
         *addr_of_mut!(NEXT_CR3) = (*addr_of!(TASKS))[next].cr3;
+
+        // Pile kernel de la prochaine tâche. Le CPU y bascule automatiquement
+        // à chaque entrée en ring 0 depuis le ring 3 (IRQ timer ou int 0x80).
+        // Sans mise à jour ici, toutes les tâches ring 3 partageraient la pile
+        // fixée au boot et écraseraient mutuellement leur contexte sauvegardé
+        // (voir gdt::set_kernel_stack).
+        let kstack_top = (*addr_of_mut!(TASKS))[next].stack.as_mut_ptr().add(STACK_SIZE) as u64;
+        crate::gdt::set_kernel_stack(kstack_top);
         (*addr_of!(TASKS))[next].rsp
     }
 }

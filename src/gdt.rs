@@ -134,6 +134,31 @@ pub fn init(kernel_stack_top: u64) {
     }
 }
 
+/// Met à jour la pile kernel (RSP0) du TSS — appelée à chaque context switch.
+///
+/// POURQUOI PAR TÂCHE ?
+/// ────────────────────
+/// RSP0 est l'adresse que le CPU charge dans RSP à CHAQUE entrée en ring 0
+/// depuis le ring 3 : IRQ timer, mais aussi `int 0x80`. Le CPU y empile la
+/// frame iretq, puis le stub y empile les 15 registres.
+///
+/// Avec un RSP0 fixe (une seule pile pour tout le monde), deux processus
+/// ring 3 écrivent leur contexte sauvegardé À LA MÊME ADRESSE :
+///
+///   A préempté  → RSP = rsp0, frame de A écrite en rsp0-160
+///                 schedule() sauve A.rsp = rsp0-160
+///   switch → B  → on restaure B.rsp … qui vaut AUSSI rsp0-160
+///                 B dépile donc le contexte de A et iretq dans A
+///
+/// Les deux tâches fusionnent. En donnant à chaque tâche sa propre pile
+/// kernel, chaque contexte est sauvegardé dans sa propre zone.
+///
+/// Écriture via addr_of_mut! : Tss est #[repr(C, packed)], on ne peut pas
+/// créer de référence vers un de ses champs.
+pub fn set_kernel_stack(top: u64) {
+    unsafe { addr_of_mut!(TSS.rsp0).write_unaligned(top); }
+}
+
 #[repr(C,packed)]
 struct GdtPointer {
     limit:  u16,
