@@ -196,21 +196,35 @@ fn sys_read(fd: u64, buf_ptr: u64, len: u64) -> u64 {
             crate::ipc::pipe_read(pos, buf) as u64
         }
         FD_KFS => {
-
             let name = unsafe { (*addr_of!(TASKS))[cur].fds[idx].name };
             let name_len = name.iter().position(|&b| b == 0).unwrap_or(28);
+
+            // Tampon de transit kernel. read_at() écrit toujours à partir de
+            // kbuf[0] : l'offset dans le FICHIER est le paramètre `pos`, il ne
+            // doit jamais servir à indexer kbuf.
             let mut kbuf = [0u8; 512];
 
-            let file_size = crate::fs::kfs::read_at(&name[..name_len], pos, &mut kbuf);
+            let want = len as usize;
+            let dst  = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, want) };
 
-            if file_size == 0 || pos >= file_size { return 0; }
+            // Le tampon fait 512 o alors que l'appelant peut demander plus :
+            // on boucle bloc par bloc jusqu'à remplir sa demande ou toucher
+            // la fin du fichier (read_at renvoie 0).
+            let mut total = 0usize;
 
-            let to_copy = (len as usize).min(file_size - pos);
-            let dst = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, to_copy) };
+            while total < want {
 
-            dst.copy_from_slice(&kbuf[pos..pos + to_copy]);
-            unsafe { (*addr_of_mut!(TASKS))[cur].fds[idx].pos += to_copy; }
-            to_copy as u64
+                let chunk = (want - total).min(kbuf.len());
+                let n = crate::fs::kfs::read_at(&name[..name_len], pos + total, &mut kbuf[..chunk]);
+
+                if n == 0 { break; }                    // fin de fichier
+
+                dst[total..total + n].copy_from_slice(&kbuf[..n]);
+                total += n;
+            }
+
+            unsafe { (*addr_of_mut!(TASKS))[cur].fds[idx].pos += total; }
+            total as u64
         }
         _ => u64::MAX
     }

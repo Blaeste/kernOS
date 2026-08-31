@@ -75,6 +75,33 @@ pub extern "C" fn _start() -> ! {
         close(fd_r);
     }
 
+    // ── Test lecture > 512 octets ─────────────────────────────────────────
+    // Prerequis : `install big` copie l'ELF hello (~19 Ko) dans KFS.
+    // Verifie que read() franchit la frontiere des 512 o (taille du tampon
+    // de transit kernel) et que fd.pos avance correctement d'un appel a
+    // l'autre : on lit jusqu'a EOF et on compte le total.
+    let fd = open(b"big");
+    if fd == u64::MAX {
+
+        write(b"[hello] big:     absent -> fais 'install big' puis 'run'\n");
+    } else {
+
+        let mut buf = [0u8; 512];
+        let mut total: u64 = 0;
+
+        loop {
+            let n = read(fd, &mut buf);
+            if n == 0 || n == u64::MAX { break; }
+            total += n;
+        }
+
+        write(b"[hello] big:     ");
+        print_u64(total);
+        write(b" octets lus\n");
+
+        close(fd);
+    }
+
     // ── Test stdin ─────────────────────────────────────────────────────────
     write(b"Ton nom ? ");
     let mut buf = [0u8; 64];
